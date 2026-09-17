@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medicine Locator - System Architecture</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            text-align: center;
+            color: #1e3a5f;
+            font-size: 2rem;
+            margin-bottom: 5px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+        }
+        .section-title {
+            text-align: center;
+            font-weight: bold;
+            color: #333;
+            margin: 20px 0 15px;
+            font-size: 1rem;
+        }
+        .layer {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+        }
+        .box {
+            padding: 15px 20px;
+            border-radius: 12px;
+            color: white;
+            text-align: center;
+            min-width: 140px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            transition: transform 0.2s;
+        }
+        .box:hover { transform: translateY(-3px); }
+        .box-title { font-weight: bold; font-size: 0.95rem; }
+        .box-sub { font-size: 0.75rem; opacity: 0.9; margin-top: 3px; }
+        
+        .user { background: linear-gradient(135deg, #3498db, #2980b9); }
+        .pharmacy { background: linear-gradient(135deg, #27ae60, #1e8449); }
+        .admin { background: linear-gradient(135deg, #9b59b6, #8e44ad); }
+        .frontend { background: linear-gradient(135deg, #e74c3c, #c0392b); }
+        .backend { background: linear-gradient(135deg, #f39c12, #d68910); }
+        .middleware { background: linear-gradient(135deg, #34495e, #2c3e50); }
+        .model { background: linear-gradient(135deg, #16a085, #138d75); }
+        .database { background: linear-gradient(135deg, #1abc9c, #17a589); }
+        
+        .arrow-container {
+            text-align: center;
+            color: #999;
+            font-size: 1.5rem;
+            margin: 10px 0;
+        }
+        .features {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        .features h3 { color: #333; margin-bottom: 10px; }
+        .features ul { list-style: none; }
+        .features li { 
+            padding: 5px 0;
+            color: #555;
+        }
+        .features li::before {
+            content: "✓ ";
+            color: #27ae60;
+            font-weight: bold;
+        }
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin: 20px 0;
+            padding: 15px;
+            background: #f1f2f6;
+            border-radius: 10px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.8rem;
+        }
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+        .flow-diagram {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 30px;
+            margin: 30px 0;
+            padding: 20px;
+            background: #fafbfc;
+            border-radius: 15px;
+        }
+        .flow-column {
+            text-align: center;
+        }
+        .flow-column h4 {
+            color: #666;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #eee;
+        }
+        .flow-item {
+            background: white;
+            padding: 12px;
+            border-radius: 8px;
+            margin: 10px 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            font-size: 0.85rem;
+        }
+        .route-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .route-table th, .route-table td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        .route-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+        }
+        .route-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 15px;
+            font-size: 0.75rem;
+            font-weight: bold;
+        }
+        .route-public { background: #d5f5e3; color: #1e8449; }
+        .route-auth { background: #fdebd0; color: #b9770e; }
+        .route-admin { background: #e8daef; color: #7d3c98; }
+        .route-portal { background: #d4efdf; color: #196f3d; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏥 Medicine Locator System Architecture</h1>
+        <p class="subtitle">Bacolod City - 3rd Party SaaS Platform</p>
+
+        <!-- Legend -->
+        <div class="legend">
+            <div class="legend-item"><div class="legend-color" style="background:#3498db"></div>Guest User</div>
+            <div class="legend-item"><div class="legend-color" style="background:#27ae60"></div>Pharmacy Admin</div>
+            <div class="legend-item"><div class="legend-color" style="background:#9b59b6"></div>Super Admin</div>
+            <div class="legend-item"><div class="legend-color" style="background:#e74c3c"></div>Frontend</div>
+            <div class="legend-item"><div class="legend-color" style="background:#f39c12"></div>Backend</div>
+            <div class="legend-item"><div class="legend-color" style="background:#1abc9c"></div>Database</div>
+        </div>
+
+        <!-- User Roles -->
+        <div class="section-title">👥 USER ROLES</div>
+        <div class="layer">
+            <div class="box user">
+                <div class="box-title">🔍 Guest User</div>
+                <div class="box-sub">Medicine Search</div>
+            </div>
+            <div class="box pharmacy">
+                <div class="box-title">🏪 Pharmacy Admin</div>
+                <div class="box-sub">Manage Own Inventory</div>
+            </div>
+            <div class="box admin">
+                <div class="box-title">🛡️ Super Admin</div>
+                <div class="box-sub">Platform Management</div>
+            </div>
+        </div>
+
+        <div class="arrow-container">▼ ▼ ▼</div>
+
+        <!-- Frontend -->
+        <div class="section-title">🖥️ FRONTEND (Laravel Blade + Tailwind CSS + Leaflet.js)</div>
+        <div class="layer">
+            <div class="box frontend">
+                <div class="box-title">Public Map</div>
+                <div class="box-sub">/ (home)</div>
+            </div>
+            <div class="box frontend">
+                <div class="box-title">Auth Pages</div>
+                <div class="box-sub">/login, /register</div>
+            </div>
+            <div class="box frontend">
+                <div class="box-title">Portal Dashboard</div>
+                <div class="box-sub">/portal/*</div>
+            </div>
+            <div class="box frontend">
+                <div class="box-title">Admin Dashboard</div>
+                <div class="box-sub">/admin/*</div>
+            </div>
+        </div>
+
+        <div class="arrow-container">▼ ▼ ▼</div>
+
+        <!-- Backend -->
+        <div class="section-title">⚙️ BACKEND (Laravel 11 + PHP 8.2)</div>
+        <div class="layer">
+            <div class="box backend">
+                <div class="box-title">PharmacySearch</div>
+                <div class="box-sub">Controller</div>
+            </div>
+            <div class="box backend">
+                <div class="box-title">Auth</div>
+                <div class="box-sub">Controller</div>
+            </div>
+            <div class="box backend">
+                <div class="box-title">Portal</div>
+                <div class="box-sub">Controller</div>
+            </div>
+            <div class="box backend">
+                <div class="box-title">Admin</div>
+                <div class="box-sub">Controller</div>
+            </div>
+            <div class="box middleware">
+                <div class="box-title">RoleMiddleware</div>
+                <div class="box-sub">Auth Guard</div>
+            </div>
+        </div>
+
+        <div class="arrow-container">▼ ▼ ▼</div>
+
+        <!-- Models -->
+        <div class="section-title">📦 ELOQUENT MODELS</div>
+        <div class="layer">
+            <div class="box model">
+                <div class="box-title">User</div>
+                <div class="box-sub">role, pharmacy_id</div>
+            </div>
+            <div class="box model">
+                <div class="box-title">Pharmacy</div>
+                <div class="box-sub">lat, lng, address</div>
+            </div>
+            <div class="box model">
+                <div class="box-title">Medicine</div>
+                <div class="box-sub">name, category</div>
+            </div>
+            <div class="box model">
+                <div class="box-title">PharmacyMedicine</div>
+                <div class="box-sub">Pivot (price, stock)</div>
+            </div>
+        </div>
+
+        <div class="arrow-container">▼ ▼ ▼</div>
+
+        <!-- Database -->
+        <div class="section-title">🗄️ DATABASE (MySQL)</div>
+        <div class="layer">
+            <div class="box database">
+                <div class="box-title">users</div>
+            </div>
+            <div class="box database">
+                <div class="box-title">pharmacies</div>
+            </div>
+            <div class="box database">
+                <div class="box-title">medicines</div>
+            </div>
+            <div class="box database">
+                <div class="box-title">pharmacy_medicine</div>
+            </div>
+        </div>
+
+        <!-- Route Table -->
+        <h3 style="margin-top: 30px; color: #333;">🛣️ Route Structure</h3>
+        <table class="route-table">
+            <thead>
+                <tr>
+                    <th>Route</th>
+                    <th>Access</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>/</code></td>
+                    <td><span class="route-badge route-public">Public</span></td>
+                    <td>Medicine search map (Guest accessible)</td>
+                </tr>
+                <tr>
+                    <td><code>/login</code></td>
+                    <td><span class="route-badge route-auth">Guest Only</span></td>
+                    <td>Login page for all users</td>
+                </tr>
+                <tr>
+                    <td><code>/register</code></td>
+                    <td><span class="route-badge route-auth">Guest Only</span></td>
+                    <td>User registration</td>
+                </tr>
+                <tr>
+                    <td><code>/pharmacy/register</code></td>
+                    <td><span class="route-badge route-auth">Guest Only</span></td>
+                    <td>Pharmacy owner registration</td>
+                </tr>
+                <tr>
+                    <td><code>/portal/*</code></td>
+                    <td><span class="route-badge route-portal">Pharmacy Admin</span></td>
+                    <td>Inventory & profile management (own pharmacy only)</td>
+                </tr>
+                <tr>
+                    <td><code>/admin/*</code></td>
+                    <td><span class="route-badge route-admin">Super Admin</span></td>
+                    <td>Platform management (all pharmacies & medicines)</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- Features -->
+        <div class="features">
+            <h3>✨ Key Features</h3>
+            <ul>
+                <li>GPS-Enabled Pharmacy Locator with Haversine Formula</li>
+                <li>Real-Time Medicine Inventory Management</li>
+                <li>Role-Based Access Control (RBAC) with 3 User Types</li>
+                <li>Pharmacy Self-Registration with Map Location Picker</li>
+                <li>Medicine Search with Proximity Filtering</li>
+                <li>Scoped Data Access (Pharmacy Admins see only their data)</li>
+            </ul>
+        </div>
+
+        <!-- Tech Stack -->
+        <div style="margin-top: 20px; text-align: center; color: #888; font-size: 0.85rem;">
+            <strong>Tech Stack:</strong> Laravel 11 • PHP 8.2 • MySQL • Tailwind CSS • Leaflet.js • Blade Templates
+        </div>
+    </div>
+</body>
+</html>
