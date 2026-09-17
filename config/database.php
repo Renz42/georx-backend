@@ -17,7 +17,7 @@ return [
     |
     */
 
-    'default' => env('DB_CONNECTION', 'sqlite'),
+    'default' => env('DB_CONNECTION', 'pgsql'),
 
     /*
     |--------------------------------------------------------------------------
@@ -87,23 +87,17 @@ return [
         'pgsql' => [
             'driver'         => 'pgsql',
             'url'            => env('DB_URL'),
-            'host'           => env('DB_HOST', '127.0.0.1'),
+            'host'           => env('DB_HOST', 'db.aqzeibjljgvzvgpobbkx.supabase.co'),
             'port'           => env('DB_PORT', '5432'),
             'database'       => env('DB_DATABASE', 'postgres'),
             'username'       => env('DB_USERNAME', 'postgres'),
-            'password'       => env('DB_PASSWORD', ''),
+            'password'       => env('DB_PASSWORD', 'Jake09515832123'),
             'charset'        => env('DB_CHARSET', 'utf8'),
             'prefix'         => '',
             'prefix_indexes' => true,
-            // Supabase uses the "public" schema by default.
-            // If you use row-level security schemas, list them here.
             'search_path'    => env('DB_SCHEMA', 'public'),
-            // Supabase requires SSL. Use 'require' for production,
-            // 'prefer' for local PostgreSQL dev.
             'sslmode'        => env('DB_SSLMODE', 'require'),
-            // Supabase connection options
             'options'        => [
-                // Set statement timeout to prevent runaway queries (milliseconds)
                 'statement_timeout'              => env('DB_STATEMENT_TIMEOUT', '30000'),
             ],
         ],
