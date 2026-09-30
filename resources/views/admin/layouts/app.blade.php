@@ -45,9 +45,9 @@
                     <i class="fas fa-user-circle text-slate-400"></i>
                     {{ Auth::user()->name ?? 'Admin' }}
                 </div>
-                <form action="{{ route('logout') }}" method="POST" class="inline">
+                <form id="logoutForm" action="{{ route('logout') }}" method="POST" class="inline">
                     @csrf
-                    <button type="submit" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 border border-slate-200">
+                    <button type="button" id="logoutBtn" onclick="openLogoutModal()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 border border-slate-200">
                         <i class="fas fa-sign-out-alt text-slate-500"></i> <span class="hidden sm:inline">Logout</span>
                     </button>
                 </form>
@@ -137,6 +137,130 @@
             </div>
         </main>
     </div>
+
+    <!-- Logout Confirmation Modal -->
+    <div id="logoutModal" 
+         class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm opacity-0 pointer-events-none transition-opacity duration-200"
+         role="dialog" 
+         aria-modal="true" 
+         aria-labelledby="logoutModalTitle" 
+         aria-describedby="logoutModalDesc">
+        
+        <div id="logoutModalCard" 
+             class="w-full max-w-sm bg-white rounded-2xl p-6 sm:p-7 shadow-2xl border border-slate-100 text-center transform scale-95 transition-transform duration-200">
+            
+            <!-- Soft Rose Warning Badge -->
+            <div class="w-12 h-12 rounded-xl bg-rose-50 border border-rose-100 text-rose-500 flex items-center justify-center mx-auto mb-4 text-xl">
+                <i class="fas fa-sign-out-alt"></i>
+            </div>
+
+            <!-- Title -->
+            <h3 id="logoutModalTitle" class="text-xl font-black text-slate-900 tracking-tight">
+                Log Out?
+            </h3>
+
+            <!-- Description -->
+            <p id="logoutModalDesc" class="text-slate-500 text-sm font-medium mt-2 leading-relaxed">
+                Are you sure you want to log out of your GEORX account?
+            </p>
+
+            <!-- Action Buttons -->
+            <div class="mt-6 flex flex-col-reverse sm:flex-row items-center justify-center gap-2.5">
+                <!-- No, Cancel Button -->
+                <button type="button" 
+                        id="cancelLogoutBtn"
+                        onclick="closeLogoutModal()" 
+                        class="w-full sm:w-auto flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 px-4 rounded-xl border border-slate-200/80 transition-all text-sm focus:outline-none focus:ring-2 focus:ring-slate-400">
+                    No, Cancel
+                </button>
+
+                <!-- Yes, Log Out Button -->
+                <button type="button" 
+                        id="confirmLogoutBtn"
+                        onclick="submitLogout()" 
+                        class="w-full sm:w-auto flex-1 bg-rose-600 hover:bg-rose-700 text-white font-bold py-2.5 px-4 rounded-xl shadow-sm hover:shadow transition-all text-sm flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-rose-500 active:scale-[0.99]">
+                    <span id="confirmLogoutText">Yes, Log Out</span>
+                    <i id="confirmLogoutSpinner" class="fas fa-spinner fa-spin hidden text-xs"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Logout Confirmation Script -->
+    <script>
+        let triggerLogoutBtn = null;
+
+        function openLogoutModal() {
+            triggerLogoutBtn = document.activeElement;
+            const modal = document.getElementById('logoutModal');
+            const card = document.getElementById('logoutModalCard');
+            const cancelBtn = document.getElementById('cancelLogoutBtn');
+            
+            if (modal && card) {
+                modal.classList.remove('opacity-0', 'pointer-events-none');
+                modal.classList.add('opacity-100');
+                card.classList.remove('scale-95');
+                card.classList.add('scale-100');
+                
+                if (cancelBtn) {
+                    setTimeout(() => cancelBtn.focus(), 50);
+                }
+            }
+        }
+
+        function closeLogoutModal() {
+            const modal = document.getElementById('logoutModal');
+            const card = document.getElementById('logoutModalCard');
+            
+            if (modal && card) {
+                modal.classList.add('opacity-0', 'pointer-events-none');
+                modal.classList.remove('opacity-100');
+                card.classList.add('scale-95');
+                card.classList.remove('scale-100');
+                
+                if (triggerLogoutBtn) {
+                    triggerLogoutBtn.focus();
+                }
+            }
+        }
+
+        function submitLogout() {
+            const confirmBtn = document.getElementById('confirmLogoutBtn');
+            const confirmText = document.getElementById('confirmLogoutText');
+            const confirmSpinner = document.getElementById('confirmLogoutSpinner');
+            const form = document.getElementById('logoutForm');
+
+            if (confirmBtn && form) {
+                confirmBtn.disabled = true;
+                confirmBtn.classList.add('opacity-75', 'cursor-not-allowed');
+                if (confirmText) confirmText.textContent = 'Logging out...';
+                if (confirmSpinner) confirmSpinner.classList.remove('hidden');
+
+                form.submit();
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            const modal = document.getElementById('logoutModal');
+            const card = document.getElementById('logoutModalCard');
+
+            if (modal && card) {
+                modal.addEventListener('click', function (e) {
+                    if (!card.contains(e.target)) {
+                        closeLogoutModal();
+                    }
+                });
+            }
+
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape' || e.keyCode === 27) {
+                    if (modal && !modal.classList.contains('pointer-events-none')) {
+                        closeLogoutModal();
+                    }
+                }
+            });
+        });
+    </script>
 
     @stack('scripts')
 </body>
