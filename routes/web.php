@@ -140,6 +140,9 @@ $pharmacyPortalRoutes = function () {
     Route::get('/profile', [PortalController::class, 'profile'])->name('profile');
     Route::put('/profile', [PortalController::class, 'updateProfile'])->name('profile.update');
 
+    // Customer Reviews Dashboard
+    Route::get('/reviews', [PortalController::class, 'reviews'])->name('reviews');
+
     // Settings (Theme Color, Visibility, etc.)
     Route::get('/settings', [PortalController::class, 'settings'])->name('settings');
     Route::post('/settings', [PortalController::class, 'updateSettings'])->name('settings.update');

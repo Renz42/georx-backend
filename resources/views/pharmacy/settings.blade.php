@@ -36,7 +36,7 @@
                     <div class="flex flex-col sm:flex-row gap-8 items-center border-b border-slate-100 pb-8 mb-8">
                         <!-- Logo Preview Circle -->
                         <div class="relative w-24 h-24 rounded-full border-4 border-slate-50 shadow-md bg-white flex items-center justify-center shrink-0 overflow-hidden group">
-                            <img id="logoPreview" src="{{ $pharmacy->logo ? asset('storage/' . $pharmacy->logo) : '' }}" 
+                            <img id="logoPreview" src="{{ $pharmacy->logo_url ?? '' }}" 
                                  class="{{ $pharmacy->logo ? 'block' : 'hidden' }} w-full h-full object-cover">
                                  
                             <i id="logoPlaceholder" class="fas fa-clinic-medical text-3xl text-slate-300 {{ $pharmacy->logo ? 'hidden' : 'block' }}"></i>
@@ -62,10 +62,11 @@
                                 <input type="hidden" name="remove_logo" id="removeLogoInput" value="0">
                             </div>
                         </div>
+                    </div>
                     <!-- COVER PHOTO UPLOAD SECTION -->
                     <div class="flex flex-col sm:flex-row gap-8 items-center border-b border-slate-100 pb-8 mb-8">
                         <div class="relative w-48 h-24 rounded-xl border border-slate-200 shadow-sm bg-slate-50 flex items-center justify-center shrink-0 overflow-hidden group">
-                            <img id="coverPreview" src="{{ $pharmacy->cover_photo ? asset('storage/' . $pharmacy->cover_photo) : '' }}" 
+                            <img id="coverPreview" src="{{ $pharmacy->cover_photo_url ?? '' }}" 
                                  class="{{ $pharmacy->cover_photo ? 'block' : 'hidden' }} w-full h-full object-cover">
                                  
                             <i id="coverPlaceholder" class="fas fa-image text-3xl text-slate-300 {{ $pharmacy->cover_photo ? 'hidden' : 'block' }}"></i>
@@ -152,7 +153,7 @@
                     <div class="p-8 flex-1 flex flex-col justify-between gap-6">
                         <div>
                             <div class="flex items-start justify-between mb-2">
-                                <h4 class="text-base font-black text-slate-800">Global Store Visibility</h4>
+                                <h4 class="text-base font-black text-slate-800">Manual Store Override</h4>
                                 <!-- Professional Tailwind Toggle -->
                                 <label class="relative inline-flex items-center cursor-pointer">
                                     <input type="checkbox" name="is_active" value="1" class="sr-only peer" {{ $pharmacy->is_active ? 'checked' : '' }}>
@@ -161,9 +162,35 @@
                                          id="visibilityToggleBg"></div>
                                 </label>
                             </div>
-                            <p class="text-sm text-slate-500 leading-relaxed">
-                                Turn this off to instantly hide your pharmacy from the public map and catalog search. Useful for holidays, emergencies, or off-hours.
+                            <p class="text-sm text-slate-500 leading-relaxed mb-4">
+                                Toggle this <strong>OFF</strong> to force your pharmacy offline regardless of operating hours. When <strong>ON</strong>, your pharmacy will automatically show as "Open" during operating hours and "Closed" outside those hours.
                             </p>
+
+                            <!-- Live Computed Status Indicator -->
+                            @php
+                                $statusState = $pharmacy->is_currently_open;
+                            @endphp
+                            <div class="flex items-center gap-3 p-3 rounded-xl border {{ $statusState === 'online' ? 'bg-emerald-50 border-emerald-200' : ($statusState === 'closed' ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200') }}">
+                                <div class="w-3 h-3 rounded-full shrink-0 {{ $statusState === 'online' ? 'bg-emerald-500 animate-pulse' : ($statusState === 'closed' ? 'bg-amber-500' : 'bg-red-500') }}"></div>
+                                <div>
+                                    <p class="text-xs font-black uppercase tracking-widest {{ $statusState === 'online' ? 'text-emerald-700' : ($statusState === 'closed' ? 'text-amber-700' : 'text-red-700') }}">
+                                        @if($statusState === 'online')
+                                            Currently Open
+                                        @elseif($statusState === 'closed')
+                                            Closed (Outside Operating Hours)
+                                        @else
+                                            Offline (Manual Override)
+                                        @endif
+                                    </p>
+                                    <p class="text-[10px] font-medium {{ $statusState === 'online' ? 'text-emerald-600' : ($statusState === 'closed' ? 'text-amber-600' : 'text-red-600') }}">
+                                        @if(is_array($pharmacy->operating_hours) && isset($pharmacy->operating_hours['open']) && isset($pharmacy->operating_hours['close']))
+                                            Hours: {{ \Carbon\Carbon::parse($pharmacy->operating_hours['open'])->format('h:i A') }} - {{ \Carbon\Carbon::parse($pharmacy->operating_hours['close'])->format('h:i A') }}
+                                        @else
+                                            Operating hours not configured
+                                        @endif
+                                    </p>
+                                </div>
+                            </div>
                         </div>
                         
                         <div class="pt-6 border-t border-slate-100">

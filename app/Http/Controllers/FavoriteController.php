@@ -36,7 +36,7 @@ class FavoriteController extends Controller
             ->with('medicines')
             ->get();
 
-        if ($request->wantsJson()) {
+        if ($request->is('api/*') || $request->wantsJson()) {
             return response()->json([
                 'success' => true,
                 'favorites' => $favorites->map(function ($pharmacy) {
@@ -47,6 +47,8 @@ class FavoriteController extends Controller
                         'phone' => $pharmacy->phone,
                         'latitude' => $pharmacy->latitude,
                         'longitude' => $pharmacy->longitude,
+                        'is_open' => $pharmacy->is_open ?? true,
+                        'rating' => $pharmacy->rating ?? '4.8',
                         'medicines_count' => $pharmacy->medicines->count(),
                     ];
                 }),

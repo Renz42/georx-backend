@@ -24,7 +24,7 @@ foreach ($driverEmails as $email) {
     foreach ($passwordsToTest as $pass) {
         if (Hash::check($pass, $user->password)) {
             echo "  --> MATCHED PASSWORD: '{$pass}'\n";
-            break;
+            break;1
         }
     }
 }

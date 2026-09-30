@@ -40,6 +40,7 @@ class MedicineRestocked extends Notification
 
         return [
             'type' => 'stock_alert',
+            'status' => 'restocked',
             'title' => 'Medicine Restocked',
             'message' => $msg,
             'pharmacy_id' => $this->pharmacy->id,
@@ -49,7 +50,7 @@ class MedicineRestocked extends Notification
             'selling_price' => $this->price,
             'quantity_on_hand' => $this->stock,
             'url' => '/pharmacy/' . $this->pharmacy->id . '/medicine/' . $this->medicine->id,
-            'icon' => 'fas fa-box-open text-blue-500'
+            'icon' => 'cube-outline'
         ];
     }
 }

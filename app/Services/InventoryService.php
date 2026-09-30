@@ -126,10 +126,17 @@ class InventoryService
                     'expiration_date' => $earliestActiveBatch?->expiration_date,
                 ]);
 
-                // ✅ RESTOCK ALERT: Single source of truth for restock notification
+                // RESTOCK ALERT: Single source of truth for restock notification
                 if ((!$wasAvailable || $wasZeroStock) && $totalQuantity > 0) {
                     if (class_exists(\App\Models\StockAlert::class)) {
                         \App\Models\StockAlert::checkAndNotify($pharmacyId, $medicineId);
+                    }
+                }
+
+                // OUT OF STOCK ALERT: Notify subscribers when medicine becomes unavailable
+                if (!$wasZeroStock && $totalQuantity <= 0) {
+                    if (class_exists(\App\Models\StockAlert::class)) {
+                        \App\Models\StockAlert::notifyOutOfStock($pharmacyId, $medicineId);
                     }
                 }
 

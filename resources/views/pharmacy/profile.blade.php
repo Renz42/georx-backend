@@ -30,6 +30,47 @@
         
         <!-- Left: Business Details -->
         <div class="lg:col-span-2 space-y-8">
+
+            <!-- Storefront Branding Preview Card -->
+            <div class="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="px-8 py-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                    <h3 class="font-black text-slate-800 flex items-center gap-2 text-sm uppercase tracking-tight">
+                        <i class="fas fa-image text-blue-600"></i> Storefront Branding
+                    </h3>
+                    <a href="{{ route('portal.settings') }}" class="text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors border border-blue-100">
+                        <i class="fas fa-pen mr-1"></i> Edit in Settings
+                    </a>
+                </div>
+
+                <!-- Cover Photo Banner -->
+                <div class="relative h-48 bg-gradient-to-br from-slate-100 to-slate-200 overflow-hidden">
+                    @if($pharmacy->cover_photo_url)
+                        <img src="{{ $pharmacy->cover_photo_url }}" alt="Storefront Cover" class="w-full h-full object-cover">
+                        <div class="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent"></div>
+                    @else
+                        <div class="w-full h-full flex flex-col items-center justify-center text-slate-400">
+                            <i class="fas fa-panorama text-4xl mb-2"></i>
+                            <p class="text-xs font-bold uppercase tracking-widest">No Cover Photo</p>
+                        </div>
+                    @endif
+
+                    <!-- Logo Overlay -->
+                    <div class="absolute -bottom-10 left-8">
+                        <div class="w-20 h-20 rounded-2xl border-4 border-white shadow-lg bg-white flex items-center justify-center overflow-hidden">
+                            @if($pharmacy->logo_url)
+                                <img src="{{ $pharmacy->logo_url }}" alt="Pharmacy Logo" class="w-full h-full object-cover">
+                            @else
+                                <i class="fas fa-clinic-medical text-2xl text-slate-300"></i>
+                            @endif
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pt-14 pb-6 px-8">
+                    <h4 class="text-lg font-black text-slate-800">{{ $pharmacy->name }}</h4>
+                    <p class="text-sm text-slate-500 font-medium">{{ $pharmacy->address }}</p>
+                </div>
+            </div>
             <div class="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
                 <div class="px-8 py-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
                     <h3 class="font-black text-slate-800 flex items-center gap-2 text-sm uppercase tracking-tight">
@@ -102,13 +143,17 @@
                     <div class="space-y-1">
                         <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Current Status</label>
                         <div class="pt-1">
-                            @if($pharmacy->is_active)
+                            @if($pharmacy->is_currently_open === 'online')
                                 <span class="bg-emerald-50 text-emerald-600 text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-widest border border-emerald-100">
                                     <i class="fas fa-signal mr-1"></i> Currently Online
                                 </span>
+                            @elseif($pharmacy->is_currently_open === 'closed')
+                                <span class="bg-amber-50 text-amber-600 text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-widest border border-amber-100">
+                                    <i class="fas fa-clock mr-1"></i> Closed (Outside Hours)
+                                </span>
                             @else
                                 <span class="bg-red-50 text-red-600 text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-widest border border-red-100">
-                                    <i class="fas fa-power-off mr-1"></i> Maintenance Mode
+                                    <i class="fas fa-power-off mr-1"></i> Offline
                                 </span>
                             @endif
                         </div>

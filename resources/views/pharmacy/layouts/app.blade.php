@@ -45,8 +45,8 @@
 
                 <!-- LOGO CONTAINER -->
                 <div class="w-12 h-12 rounded-xl shadow-inner flex items-center justify-center overflow-hidden shrink-0 border-2 border-white/20 bg-white/10 backdrop-blur-sm hidden sm:flex">
-                    @if(Auth::user()->pharmacy->logo)
-                        <img src="{{ asset('storage/' . Auth::user()->pharmacy->logo) }}" alt="Logo" class="w-full h-full object-cover bg-white">
+                    @if(Auth::user()->pharmacy->logo_url)
+                        <img src="{{ Auth::user()->pharmacy->logo_url }}" alt="Logo" class="w-full h-full object-cover bg-white">
                     @else
                         <i class="fas fa-clinic-medical text-white text-xl shadow-sm"></i>
                     @endif
@@ -116,6 +116,14 @@
                 <a href="{{ route('portal.audit_logs') }}" class="flex items-center gap-4 px-4 py-3.5 rounded-xl mb-1 transition-all {{ request()->routeIs('*.audit_logs') ? 'bg-blue-50 text-blue-700 font-bold shadow-sm border-blue-200 border' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800 font-semibold group' }}">
                     <i class="fas fa-history w-5 text-center text-lg {{ request()->routeIs('*.audit_logs') ? 'text-blue-600' : 'text-slate-400 group-hover:text-blue-500' }} transition-colors"></i> 
                     Audit Logs
+                </a>
+                @endif
+
+                <!-- Reviews Link -->
+                @if(Auth::user()->isPharmacyOwner() || Auth::user()->isPharmacist())
+                <a href="{{ route('portal.reviews') }}" class="flex items-center gap-4 px-4 py-3.5 rounded-xl mb-1 transition-all {{ request()->routeIs('*.reviews') ? 'bg-blue-50 text-blue-700 font-bold shadow-sm border-blue-200 border' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800 font-semibold group' }}">
+                    <i class="fas fa-star w-5 text-center text-lg {{ request()->routeIs('*.reviews') ? 'text-blue-600' : 'text-slate-400 group-hover:text-blue-500' }} transition-colors"></i> 
+                    Customer Reviews
                 </a>
                 @endif
 

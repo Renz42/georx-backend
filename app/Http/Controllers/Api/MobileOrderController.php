@@ -207,14 +207,11 @@ class MobileOrderController extends Controller
 
         $now = now();
         $order->status = Order::STATUS_DELIVERED;
-        $order->customer_confirmed_delivery = true;
-        $order->customer_confirmed_at = $now;
         $order->delivered_at = $order->delivered_at ?? $now;
         $order->save();
 
         if ($order->delivery) {
             $order->delivery->status = Delivery::STATUS_DELIVERED;
-            $order->delivery->customer_confirmed_at = $now;
             $order->delivery->delivered_at = $order->delivery->delivered_at ?? $now;
             $order->delivery->save();
 
@@ -249,7 +246,7 @@ class MobileOrderController extends Controller
                 'status' => $order->status,
                 'status_label' => 'Delivered (Approved)',
                 'customer_confirmed_delivery' => true,
-                'customer_confirmed_at' => $now->format('M d, Y g:i A'),
+                'customer_confirmed_at' => $order->delivered_at ? $order->delivered_at->format('M d, Y g:i A') : $now->format('M d, Y g:i A'),
             ],
         ]);
     }

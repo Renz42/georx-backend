@@ -56,6 +56,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/notifications/delete-all', [\App\Http\Controllers\NotificationController::class, 'destroyAll']);
     Route::delete('/notifications/{notification}', [\App\Http\Controllers\NotificationController::class, 'destroy']);
 
+    // Favorites
+    Route::get('/favorites', [\App\Http\Controllers\FavoriteController::class, 'index']);
+    Route::post('/favorites/toggle', [\App\Http\Controllers\FavoriteController::class, 'toggle']);
+    Route::post('/favorites/check', [\App\Http\Controllers\FavoriteController::class, 'check']);
+    Route::delete('/favorites', [\App\Http\Controllers\FavoriteController::class, 'remove']);
+
     // Stock Alerts
     Route::post('/stock-alerts', [\App\Http\Controllers\NotificationController::class, 'subscribeStockAlert']);
     Route::delete('/stock-alerts', [\App\Http\Controllers\NotificationController::class, 'unsubscribeStockAlert']);
@@ -72,6 +78,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/user/orders/{id}/confirm-delivery', [MobileOrderController::class, 'confirmDelivery']);
     Route::post('/orders', [\App\Http\Controllers\OrderController::class, 'placeOrder']);
     Route::post('/orders/{id}/review', [\App\Http\Controllers\OrderController::class, 'submitReview']);
+    Route::post('/pharmacies/{pharmacy}/reviews', [\App\Http\Controllers\OrderController::class, 'submitPharmacyReview']);
+
+    // Patient Pharmacy Messages
+    Route::get('/messages', [\App\Http\Controllers\MessageController::class, 'apiConversations']);
+    Route::get('/messages/{id}', [\App\Http\Controllers\MessageController::class, 'apiMessages']);
+    Route::post('/messages/{id}', [\App\Http\Controllers\MessageController::class, 'apiSend']);
 
     // Driver Mobile Routes
     Route::prefix('driver')->group(function () {

@@ -236,4 +236,96 @@ class MessageController extends Controller
 
         return response()->json(['count' => $count]);
     }
+
+    /**
+     * Mobile API: Get patient conversations list.
+     */
+    public function apiConversations(Request $request)
+    {
+        $user = $request->user();
+        $conversations = Conversation::where('user_id', $user->id)
+            ->with(['pharmacy:id,name,address', 'latestMessage'])
+            ->orderByDesc('last_message_at')
+            ->get()
+            ->map(function ($conv) use ($user) {
+                return [
+                    'id' => $conv->id,
+                    'pharmacy_id' => $conv->pharmacy_id,
+                    'pharmacy_name' => $conv->pharmacy->name ?? 'Pharmacy Partner',
+                    'last_message' => $conv->latestMessage->body ?? 'No messages yet',
+                    'time' => $conv->last_message_at ? $conv->last_message_at->diffForHumans() : 'Recent',
+                    'unread_count' => $conv->unreadCountFor($user->id),
+                ];
+            });
+
+        return response()->json([
+            'status' => 'success',
+            'conversations' => $conversations,
+        ]);
+    }
+
+    /**
+     * Mobile API: Get messages in a conversation.
+     */
+    public function apiMessages(Request $request, $id)
+    {
+        $user = $request->user();
+        $conversation = Conversation::where('id', $id)
+            ->where('user_id', $user->id)
+            ->with(['messages.sender', 'pharmacy'])
+            ->firstOrFail();
+
+        $conversation->markAsReadFor($user->id);
+
+        return response()->json([
+            'status' => 'success',
+            'pharmacy' => [
+                'id' => $conversation->pharmacy->id ?? null,
+                'name' => $conversation->pharmacy->name ?? 'Pharmacy',
+            ],
+            'messages' => $conversation->messages->map(function ($msg) use ($user) {
+                return [
+                    'id' => $msg->id,
+                    'body' => $msg->body,
+                    'image_path' => $msg->image_path ? asset('storage/' . $msg->image_path) : null,
+                    'is_mine' => (int)$msg->sender_id === (int)$user->id,
+                    'created_at' => $msg->created_at->format('M d, Y h:i A'),
+                    'time_ago' => $msg->created_at->diffForHumans(),
+                ];
+            }),
+        ]);
+    }
+
+    /**
+     * Mobile API: Send a message in a conversation.
+     */
+    public function apiSend(Request $request, $id)
+    {
+        $request->validate([
+            'message' => 'required|string|max:1000',
+        ]);
+
+        $user = $request->user();
+        $conversation = Conversation::where('id', $id)
+            ->where('user_id', $user->id)
+            ->firstOrFail();
+
+        $message = $conversation->messages()->create([
+            'sender_id' => $user->id,
+            'body' => $request->message,
+        ]);
+
+        $conversation->update(['last_message_at' => now()]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => [
+                'id' => $message->id,
+                'body' => $message->body,
+                'is_mine' => true,
+                'created_at' => $message->created_at->format('M d, Y h:i A'),
+                'time_ago' => $message->created_at->diffForHumans(),
+            ],
+        ]);
+    }
 }

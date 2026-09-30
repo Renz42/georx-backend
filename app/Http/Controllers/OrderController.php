@@ -205,10 +205,26 @@ class OrderController extends Controller
             'pharmacy_overall' => 'nullable|integer|min:1|max:5',
         ]);
 
-        $order = Order::where('id', $id)->where('user_id', Auth::id())->where('status', 'delivered')->firstOrFail();
+        $user = $request->user() ?? Auth::user();
+        if (!$user) {
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json(['message' => 'Unauthenticated.'], 401);
+            }
+            return redirect()->route('login')->with('error', 'Please log in to submit a review.');
+        }
+
+        $userId = $user->id;
+
+        $order = Order::where('id', $id)
+            ->where('user_id', $userId)
+            ->where(function ($query) {
+                $query->where('status', Order::STATUS_DELIVERED)
+                      ->orWhere('customer_confirmed_delivery', true);
+            })
+            ->firstOrFail();
 
         if ($order->review) {
-            if ($request->expectsJson()) {
+            if ($request->expectsJson() || $request->is('api/*')) {
                 return response()->json(['status' => 'error', 'message' => 'You have already reviewed this order.'], 422);
             }
             return back()->with('error', 'You have already reviewed this order.');
@@ -216,7 +232,7 @@ class OrderController extends Controller
 
         $review = \App\Models\Review::create([
             'order_id' => $order->id,
-            'user_id' => Auth::id(),
+            'user_id' => $userId,
             'pharmacy_id' => $order->pharmacy_id,
             'driver_id' => $order->delivery?->driver_id ?? $order->delivery_partner_id,
             'rating' => $request->rating,
@@ -234,7 +250,7 @@ class OrderController extends Controller
             'pharmacy_overall' => $request->pharmacy_overall ?? $request->rating,
         ]);
 
-        if ($request->expectsJson()) {
+        if ($request->expectsJson() || $request->is('api/*')) {
             return response()->json([
                 'status' => 'success',
                 'message' => 'Thank you for your detailed feedback!',
@@ -269,16 +285,118 @@ class OrderController extends Controller
         $avgPharmacy = \App\Models\Review::where('pharmacy_id', $pharmacy->id)->avg('pharmacy_overall') ?? 0;
         $totalReviews = \App\Models\Review::where('pharmacy_id', $pharmacy->id)->count();
 
+        $formattedReviews = collect($reviews->items())->map(function ($rev) {
+            $name = $rev->user?->name;
+            if (!empty($name)) {
+                $parts = explode(' ', trim($name));
+                $displayName = count($parts) > 1 
+                    ? $parts[0] . ' ' . strtoupper(substr(end($parts), 0, 1)) . '.' 
+                    : $parts[0];
+            } else {
+                $displayName = 'Verified Patient';
+            }
+
+            return [
+                'id' => $rev->id,
+                'user_name' => $displayName,
+                'rating' => (int) ($rev->pharmacy_overall ?? $rev->rating ?? 5),
+                'comment' => $rev->comment,
+                'date' => $rev->created_at ? $rev->created_at->format('M d, Y') : null,
+                'created_at' => $rev->created_at?->toISOString(),
+                'medicine_availability' => $rev->medicine_availability,
+                'price_rating' => $rev->price_rating,
+                'customer_service' => $rev->customer_service,
+                'accuracy' => $rev->accuracy,
+                'pharmacy_overall' => $rev->pharmacy_overall,
+                'is_verified_purchase' => !empty($rev->order_id),
+            ];
+        })->values();
+
+        $avgScore = round($avgPharmacy ?: ($pharmacy->average_rating ?: 0), 1);
+
         return response()->json([
+            'status' => 'success',
             'success' => true,
             'pharmacy_id' => $pharmacy->id,
+            // Top-level fields for direct mobile consumption:
+            'rating' => $avgScore,
+            'count' => $totalReviews,
+            'reviews' => $formattedReviews,
+            // Backward-compatible summary:
             'summary' => [
                 'average_delivery_rating' => round($avgDelivery, 1),
-                'average_pharmacy_rating' => round($avgPharmacy, 1),
+                'average_pharmacy_rating' => $avgScore,
                 'total_reviews' => $totalReviews,
             ],
-            'reviews' => $reviews,
+            // Backward-compatible paginator info:
+            'paginated' => [
+                'current_page' => $reviews->currentPage(),
+                'last_page' => $reviews->lastPage(),
+                'per_page' => $reviews->perPage(),
+                'total' => $reviews->total(),
+            ],
         ]);
+    }
+
+    /**
+     * Submit a direct patient feedback/review for a pharmacy.
+     * Route: POST /api/pharmacies/{pharmacy}/reviews
+     */
+    public function submitPharmacyReview(Request $request, \App\Models\Pharmacy $pharmacy)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthenticated.'], 401);
+        }
+
+        $validated = $request->validate([
+            'rating' => 'required|integer|min:1|max:5',
+            'comment' => 'nullable|string|max:1000',
+            'medicine_availability' => 'nullable|integer|min:1|max:5',
+            'price_rating' => 'nullable|integer|min:1|max:5',
+            'customer_service' => 'nullable|integer|min:1|max:5',
+            'accuracy' => 'nullable|integer|min:1|max:5',
+            'pharmacy_overall' => 'nullable|integer|min:1|max:5',
+        ]);
+
+        // Duplicate prevention: 1 direct storefront feedback per user per pharmacy
+        $existing = \App\Models\Review::where('pharmacy_id', $pharmacy->id)
+            ->where('user_id', $user->id)
+            ->whereNull('order_id')
+            ->first();
+
+        if ($existing) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'You have already submitted feedback for this pharmacy.'
+            ], 422);
+        }
+
+        $rating = (int) $validated['rating'];
+
+        $review = \App\Models\Review::create([
+            'order_id' => null,
+            'user_id' => $user->id,
+            'pharmacy_id' => $pharmacy->id,
+            'driver_id' => null,
+            'rating' => $rating,
+            'comment' => $validated['comment'] ?? null,
+            'pharmacy_overall' => $validated['pharmacy_overall'] ?? $rating,
+            'medicine_availability' => $validated['medicine_availability'] ?? $rating,
+            'price_rating' => $validated['price_rating'] ?? $rating,
+            'customer_service' => $validated['customer_service'] ?? $rating,
+            'accuracy' => $validated['accuracy'] ?? $rating,
+            'delivery_speed' => null,
+            'driver_professionalism' => null,
+            'medicine_condition' => null,
+            'delivery_overall' => null,
+        ]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Thank you for your feedback about ' . $pharmacy->name . '!',
+            'review' => $review,
+        ], 201);
     }
 
     // =============================================

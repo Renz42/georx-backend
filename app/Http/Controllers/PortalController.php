@@ -523,6 +523,8 @@ class PortalController extends Controller
         // ==============================================================
         if ($oldStock == 0 && $validated['quantity_on_hand'] > 0) {
             \App\Models\StockAlert::checkAndNotify($pharmacy->id, $medicineId);
+        } elseif ($oldStock > 0 && $validated['quantity_on_hand'] == 0) {
+            \App\Models\StockAlert::notifyOutOfStock($pharmacy->id, $medicineId);
         }
 
         return redirect('/portal/inventory')->with('success', 'Inventory updated!');
@@ -629,6 +631,31 @@ class PortalController extends Controller
         ]);
 
         return redirect('/portal/profile')->with('success', 'Profile updated!');
+    }
+
+    // =============================================
+    // CUSTOMER REVIEWS DASHBOARD
+    // =============================================
+
+    public function reviews()
+    {
+        $pharmacy = $this->getMyPharmacy();
+
+        if (!$pharmacy) {
+            return redirect('/login')->with('error', 'No pharmacy associated with your account.');
+        }
+
+        // Aggregate ratings using existing model helper
+        $ratings = \App\Models\Review::aggregateForPharmacy($pharmacy->id);
+
+        // Recent reviews with user relationship
+        $reviews = \App\Models\Review::where('pharmacy_id', $pharmacy->id)
+            ->with('user')
+            ->latest()
+            ->take(50)
+            ->get();
+
+        return view('pharmacy.reviews', compact('pharmacy', 'ratings', 'reviews'));
     }
 
     // =============================================

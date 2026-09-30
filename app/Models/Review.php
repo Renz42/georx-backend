@@ -44,6 +44,11 @@ class Review extends Model
         return $this->belongsTo(Pharmacy::class);
     }
 
+    public function driver()
+    {
+        return $this->belongsTo(User::class, 'driver_id');
+    }
+
     /**
      * Calculate the overall computed rating (average of all categories).
      */

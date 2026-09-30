@@ -47,17 +47,107 @@ class StockAlert extends Model
     // Static helper to check and notify when stock becomes available
     public static function checkAndNotify($pharmacyId, $medicineId)
     {
-        $hasActiveAlerts = self::where('pharmacy_id', $pharmacyId)
+        $hasActiveAlerts = self::where(function ($q) use ($pharmacyId) {
+                $q->where('pharmacy_id', $pharmacyId)->orWhereNull('pharmacy_id');
+            })
             ->where('medicine_id', $medicineId)
             ->where('is_active', true)
             ->exists();
 
-        if (!$hasActiveAlerts) {
+        $hasFavorites = UserFavorite::where('pharmacy_id', $pharmacyId)->exists();
+
+        if (!$hasActiveAlerts && !$hasFavorites) {
             return 0;
         }
 
         // Asynchronously dispatch chunked background queue job
         \App\Jobs\DispatchRestockAlertsJob::dispatch($pharmacyId, $medicineId);
+
+        return true;
+    }
+
+    // Static helper to notify when a medicine goes out of stock
+    public static function notifyOutOfStock($pharmacyId, $medicineId)
+    {
+        $pharmacy = Pharmacy::find($pharmacyId);
+        $medicine = Medicine::find($medicineId);
+        if (!$pharmacy || !$medicine) return false;
+
+        $alertUserIds = self::where('medicine_id', $medicineId)
+            ->where(function ($q) use ($pharmacyId) {
+                $q->where('pharmacy_id', $pharmacyId)->orWhereNull('pharmacy_id');
+            })
+            ->where('is_active', true)
+            ->pluck('user_id')
+            ->toArray();
+
+        $favoriteUserIds = UserFavorite::where('pharmacy_id', $pharmacyId)
+            ->pluck('user_id')
+            ->toArray();
+
+        $allUserIds = array_unique(array_merge($alertUserIds, $favoriteUserIds));
+        if (empty($allUserIds)) return false;
+
+        $medName = $medicine->brand_name ?? $medicine->generic_name;
+        $msg = "{$medName} is now out of stock at {$pharmacy->name}. You will be notified when it is restocked.";
+        $now = now();
+        $notifications = [];
+
+        foreach ($allUserIds as $userId) {
+            $notifications[] = [
+                'id' => (string) \Illuminate\Support\Str::uuid(),
+                'type' => 'App\Notifications\MedicineOutOfStock',
+                'notifiable_type' => 'App\Models\User',
+                'notifiable_id' => $userId,
+                'data' => json_encode([
+                    'type' => 'stock_alert',
+                    'status' => 'out_of_stock',
+                    'title' => 'Medicine Out of Stock',
+                    'message' => $msg,
+                    'pharmacy_id' => $pharmacy->id,
+                    'pharmacy_name' => $pharmacy->name,
+                    'medicine_id' => $medicine->id,
+                    'medicine_name' => $medName,
+                    'url' => '/pharmacy/' . $pharmacy->id . '/medicine/' . $medicine->id,
+                    'icon' => 'alert-circle-outline'
+                ]),
+                'read_at' => null,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+        }
+
+        if (!empty($notifications)) {
+            \Illuminate\Support\Facades\DB::table('notifications')->insert($notifications);
+        }
+
+        $deviceTokens = \App\Models\UserDeviceToken::whereIn('user_id', $allUserIds)
+            ->pluck('device_token')
+            ->toArray();
+
+        if (!empty($deviceTokens)) {
+            $pushPayloads = [];
+            foreach ($deviceTokens as $token) {
+                $pushPayloads[] = [
+                    'to' => $token,
+                    'sound' => 'default',
+                    'title' => 'Medicine Out of Stock',
+                    'body' => $msg,
+                    'data' => [
+                        'type' => 'stock_alert',
+                        'status' => 'out_of_stock',
+                        'pharmacy_id' => $pharmacy->id,
+                        'medicine_id' => $medicine->id,
+                    ],
+                ];
+            }
+
+            try {
+                \Illuminate\Support\Facades\Http::post('https://exp.host/--/api/v2/push/send', $pushPayloads);
+            } catch (\Exception $e) {
+                \Log::warning("Expo Push OutOfStock dispatch warning: " . $e->getMessage());
+            }
+        }
 
         return true;
     }
