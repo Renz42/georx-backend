@@ -115,7 +115,7 @@ class PortalController extends Controller
             'date' => now()->format('F d, Y')
         ];
 
-        $pdf = Pdf::loadView('portal.reports.sales-pdf', $data);
+        $pdf = Pdf::loadView('pharmacy.reports.sales-pdf', $data);
         return $pdf->download('Sales_Report_' . str_replace(' ', '_', $pharmacy->name) . '_' . now()->format('Y-m-d') . '.pdf');
     }
 

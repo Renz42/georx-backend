@@ -72,8 +72,8 @@
                 @foreach($topMedicines as $index => $item)
                 <tr>
                     <td style="text-align: center; font-weight: bold; color: #64748b;">#{{ $index + 1 }}</td>
-                    <td style="font-weight: bold;">{{ $item->medicine->brand_name ?? 'N/A' }}</td>
-                    <td>{{ $item->medicine->generic_name }}</td>
+                    <td style="font-weight: bold;">{{ $item->medicine?->brand_name ?? 'N/A' }}</td>
+                    <td>{{ $item->medicine?->generic_name ?? 'N/A' }}</td>
                     <td style="text-align: right; font-weight: bold; color: #0f172a;">{{ $item->total_sold }}</td>
                 </tr>
                 @endforeach
