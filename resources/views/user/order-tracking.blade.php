@@ -115,8 +115,62 @@
                     @endif
                 </div>
 
-                <!-- 2. Assigned Driver Profile Card -->
-                @if($order->deliveryPartner || $order->delivery?->driver)
+                <!-- 2. Delivery Provider Card (Grab Express / Maxim / Legacy) -->
+                @if($order->delivery_provider)
+                    @php
+                        $isGrab = $order->delivery_provider === 'grab';
+                        $providerLabel = $isGrab ? 'Grab Express' : 'Maxim Delivery';
+                        $providerIcon = $isGrab ? 'fas fa-motorcycle text-emerald-600' : 'fas fa-car-side text-amber-600';
+                        $providerBg = $isGrab ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200';
+                        $providerBadgeColor = $isGrab ? 'text-emerald-700 bg-white border-emerald-200' : 'text-amber-800 bg-white border-amber-200';
+                    @endphp
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3.5">
+                                <div class="w-12 h-12 {{ $providerBg }} rounded-2xl flex items-center justify-center border shadow-xs">
+                                    <i class="{{ $providerIcon }} text-xl"></i>
+                                </div>
+                                <div>
+                                    <h3 class="font-extrabold text-base text-slate-900">{{ $providerLabel }}</h3>
+                                    <p class="text-xs font-semibold text-slate-500">Third-Party Courier Partner</p>
+                                </div>
+                            </div>
+                            <span class="text-xs font-black px-2.5 py-1 rounded-lg border {{ $providerBadgeColor }} uppercase tracking-wider">
+                                {{ $order->delivery_status ?? 'DISPATCHED' }}
+                            </span>
+                        </div>
+
+                        <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between text-xs">
+                            <span class="text-slate-500 font-medium">Booking Reference:</span>
+                            <span class="font-mono font-black text-slate-900">{{ $order->delivery_booking_id ?? 'N/A' }}</span>
+                        </div>
+
+                        @if($order->delivery_tracking_url)
+                            <a href="{{ $order->delivery_tracking_url }}" target="_blank" rel="noopener noreferrer" 
+                               class="w-full py-3 {{ $isGrab ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-amber-600 hover:bg-amber-700' }} text-white font-extrabold rounded-xl text-xs flex items-center justify-center gap-2 shadow-md transition-all">
+                                <i class="fas fa-external-link-alt"></i> Open Live Tracking in {{ $providerLabel }}
+                            </a>
+                        @endif
+
+                        @if($order->driver_name || $order->driver_phone)
+                            <div class="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                                <div>
+                                    <p class="font-bold text-slate-800">{{ $order->driver_name ?? 'Assigned Rider' }}</p>
+                                    <p class="text-slate-500">{{ $order->driver_vehicle ?? 'Courier Vehicle' }}</p>
+                                </div>
+                                @if($order->driver_phone)
+                                    <a href="tel:{{ $order->driver_phone }}" class="px-3 py-1.5 bg-teal-50 text-teal-700 hover:bg-teal-100 font-bold rounded-lg border border-teal-200 flex items-center gap-1.5">
+                                        <i class="fas fa-phone"></i> Call
+                                    </a>
+                                @endif
+                            </div>
+                        @endif
+
+                        <p class="text-[11px] text-slate-400 italic">
+                            Live courier tracking is hosted directly on {{ $providerLabel }}'s network.
+                        </p>
+                    </div>
+                @elseif($order->deliveryPartner || $order->delivery?->driver)
                     @php
                         $driverUser = $order->deliveryPartner ?? $order->delivery?->driver;
                         $driverProfile = $driverUser?->driverProfile;

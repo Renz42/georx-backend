@@ -49,7 +49,9 @@ class Medicine extends Model
                 'purchase_price', 
                 'selling_price', 
                 'storage_condition',
-                'unit'
+                'unit',
+                'supplier',
+                'last_restocked_at'
             ])
             ->withTimestamps();
     }

@@ -5,8 +5,12 @@ namespace App\Http\Controllers;
 use App\Models\CartItem;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\Pharmacy;
+use App\Models\Medicine;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Barryvdh\DomPDF\Facade\Pdf;
 
 class OrderController extends Controller
@@ -22,11 +26,18 @@ class OrderController extends Controller
         
         $subtotal = 0;
         foreach ($cartItems as $item) {
-            $pivot = $item->pharmacy->medicines()->where('medicine_id', $item->medicine_id)->first()->pivot;
-            $subtotal += ($pivot->selling_price * $item->quantity);
+            $pivot = DB::table('pharmacy_medicine')
+                ->where('pharmacy_id', $item->pharmacy_id)
+                ->where('medicine_id', $item->medicine_id)
+                ->first();
+            $price = $pivot ? (float)$pivot->selling_price : 0.00;
+            $subtotal += ($price * $item->quantity);
         }
 
-        $deliveryFee = 50.00; // Flat fee for now
+        $deliveryFee = \App\Services\DeliveryService::calculateEstimatedDeliveryFee(
+            $pharmacy->latitude,
+            $pharmacy->longitude
+        );
         $total = $subtotal + $deliveryFee;
 
         return view('user.checkout', compact('cartItems', 'pharmacy', 'subtotal', 'deliveryFee', 'total'));
@@ -40,70 +51,47 @@ class OrderController extends Controller
             'longitude' => 'nullable|numeric',
             'pharmacy_id' => 'nullable|integer',
             'items' => 'nullable|array',
+            'items.*.medicine_id' => 'required_with:items|integer',
+            'items.*.quantity' => 'required_with:items|integer|min:1|max:1000',
         ]);
 
-        $userId = Auth::id();
+        $user = $request->user() ?? Auth::user();
+        $userId = $user ? $user->id : null;
         $isApi = $request->expectsJson() || $request->is('api/*');
+
+        if (!$userId) {
+            if ($isApi) {
+                return response()->json(['status' => 'error', 'message' => 'Unauthenticated.'], 401);
+            }
+            return redirect()->route('login')->with('error', 'Please log in to place an order.');
+        }
+
         $itemsPayload = $request->input('items', []);
 
+        // 1. Resolve selected pharmacy
         if (!empty($itemsPayload)) {
-            // API / Mobile direct JSON payload
-            $pharmacyId = $request->input('pharmacy_id') ?? $itemsPayload[0]['pharmacy_id'] ?? 1;
-            $pharmacy = \App\Models\Pharmacy::find($pharmacyId) ?? \App\Models\Pharmacy::first();
-            $pharmacyId = $pharmacy ? $pharmacy->id : 1;
-            
-            $subtotal = 0;
-            $orderItemsData = [];
-            foreach ($itemsPayload as $item) {
-                $medId = $item['medicine_id'] ?? $item['id'] ?? 1;
-                $price = (float)($item['price'] ?? 5.00);
-                $qty = (int)($item['quantity'] ?? 1);
-                $subtotal += ($price * $qty);
-                $orderItemsData[] = [
-                    'medicine_id' => $medId,
-                    'quantity' => $qty,
-                    'price' => $price,
-                ];
-            }
+            $pharmacyId = $request->input('pharmacy_id') ?? ($itemsPayload[0]['pharmacy_id'] ?? null);
+            $pharmacy = $pharmacyId ? Pharmacy::find($pharmacyId) : null;
         } else {
-            // Web view session cart items
             $cartItems = CartItem::where('user_id', $userId)->get();
-
             if ($cartItems->isEmpty()) {
                 if ($isApi) {
                     return response()->json(['status' => 'error', 'message' => 'Your cart is empty.'], 400);
                 }
                 return redirect()->route('cart.index')->with('error', 'Your cart is empty.');
             }
-
             $pharmacyId = $cartItems->first()->pharmacy_id;
-            $pharmacy = \App\Models\Pharmacy::findOrFail($pharmacyId);
-
-            $subtotal = 0;
-            $orderItemsData = [];
-            
-            foreach ($cartItems as $item) {
-                $pivot = $item->pharmacy->medicines()->where('medicine_id', $item->medicine_id)->first()?->pivot;
-                $price = $pivot ? $pivot->selling_price : 5.00;
-                $subtotal += ($price * $item->quantity);
-                
-                $orderItemsData[] = [
-                    'medicine_id' => $item->medicine_id,
-                    'quantity' => $item->quantity,
-                    'price' => $price,
-                ];
-            }
+            $pharmacy = Pharmacy::find($pharmacyId);
         }
 
-        // Block checkout if pharmacy is suspended
-        if ($pharmacy && $pharmacy->status !== 'approved') {
+        if (!$pharmacy || $pharmacy->status !== 'approved') {
             if ($isApi) {
                 return response()->json(['status' => 'error', 'message' => 'This pharmacy is currently unavailable.'], 400);
             }
             return redirect()->route('cart.index')->with('error', 'This pharmacy is currently unavailable.');
         }
 
-        // Geofence Validation for delivery address
+        // 2. Geofence Validation for delivery address
         if ($request->filled('latitude') && $request->filled('longitude')) {
             if (!\App\Services\GeofenceService::isInsideAlijis((float)$request->latitude, (float)$request->longitude)) {
                 if ($isApi) {
@@ -113,32 +101,177 @@ class OrderController extends Controller
             }
         }
 
-        $deliveryFee = 50.00;
-        $totalAmount = $subtotal + $deliveryFee;
+        // 3. Atomically validate stock, resolve authoritative price, and create order inside DB::transaction
+        try {
+            $order = DB::transaction(function () use ($request, $itemsPayload, $userId, $pharmacy) {
+                $subtotal = 0;
+                $orderItemsData = [];
 
-        $order = Order::create([
-            'user_id' => $userId ?? 1,
-            'pharmacy_id' => $pharmacyId,
-            'status' => Order::STATUS_PENDING_CONFIRMATION,
-            'total_amount' => $totalAmount,
-            'delivery_fee' => $deliveryFee,
-            'payment_method' => 'cod',
-            'delivery_address' => $request->delivery_address,
-            'latitude' => $request->latitude ?? 10.6402,
-            'longitude' => $request->longitude ?? 122.9460,
-        ]);
+                if (!empty($itemsPayload)) {
+                    foreach ($itemsPayload as $item) {
+                        $medId = (int)($item['medicine_id'] ?? $item['id'] ?? 0);
+                        $qty = (int)($item['quantity'] ?? 1);
 
-        foreach ($orderItemsData as $itemData) {
-            $order->items()->create($itemData);
-        }
+                        if ($qty < 1 || $qty > 1000) {
+                            throw new \InvalidArgumentException("Invalid quantity ({$qty}) requested for medicine ID {$medId}.");
+                        }
 
-        // Clear web cart if exists
-        if ($userId) {
-            CartItem::where('user_id', $userId)->delete();
+                        // Query pharmacy inventory with row-lock to avoid race conditions
+                        $pivot = DB::table('pharmacy_medicine')
+                            ->where('pharmacy_id', $pharmacy->id)
+                            ->where('medicine_id', $medId)
+                            ->lockForUpdate()
+                            ->first();
+
+                        if (!$pivot) {
+                            $medicine = Medicine::find($medId);
+                            $medName = $medicine ? ($medicine->brand_name ?? $medicine->generic_name) : "ID {$medId}";
+                            throw new \InvalidArgumentException("Medicine '{$medName}' is not available at {$pharmacy->name}.");
+                        }
+
+                        if (!$pivot->is_available || (int)$pivot->quantity_on_hand <= 0) {
+                            $medicine = Medicine::find($medId);
+                            $medName = $medicine ? ($medicine->brand_name ?? $medicine->generic_name) : "ID {$medId}";
+                            throw new \InvalidArgumentException("Medicine '{$medName}' is currently out of stock.");
+                        }
+
+                        if ($qty > (int)$pivot->quantity_on_hand) {
+                            $medicine = Medicine::find($medId);
+                            $medName = $medicine ? ($medicine->brand_name ?? $medicine->generic_name) : "ID {$medId}";
+                            throw new \InvalidArgumentException("Insufficient stock for '{$medName}'. Only {$pivot->quantity_on_hand} available.");
+                        }
+
+                        // Server-side authoritative price: client price is completely ignored!
+                        $serverPrice = (float)$pivot->selling_price;
+                        if ($serverPrice <= 0) {
+                            $medicine = Medicine::find($medId);
+                            $medName = $medicine ? ($medicine->brand_name ?? $medicine->generic_name) : "ID {$medId}";
+                            throw new \InvalidArgumentException("Unable to determine a valid selling price for '{$medName}'.");
+                        }
+
+                        $lineSubtotal = round($serverPrice * $qty, 2);
+                        $subtotal += $lineSubtotal;
+
+                        $orderItemsData[] = [
+                            'medicine_id' => $medId,
+                            'quantity' => $qty,
+                            'price' => $serverPrice,
+                        ];
+                    }
+                } else {
+                    $cartItems = CartItem::where('user_id', $userId)->get();
+                    if ($cartItems->isEmpty()) {
+                        throw new \InvalidArgumentException("Your cart is empty.");
+                    }
+
+                    foreach ($cartItems as $item) {
+                        $qty = (int)$item->quantity;
+                        if ($qty < 1 || $qty > 1000) {
+                            throw new \InvalidArgumentException("Invalid quantity ({$qty}) in cart.");
+                        }
+
+                        $pivot = DB::table('pharmacy_medicine')
+                            ->where('pharmacy_id', $pharmacy->id)
+                            ->where('medicine_id', $item->medicine_id)
+                            ->lockForUpdate()
+                            ->first();
+
+                        if (!$pivot) {
+                            $medicine = Medicine::find($item->medicine_id);
+                            $medName = $medicine ? ($medicine->brand_name ?? $medicine->generic_name) : "ID {$item->medicine_id}";
+                            throw new \InvalidArgumentException("Medicine '{$medName}' is not available at {$pharmacy->name}.");
+                        }
+
+                        if (!$pivot->is_available || (int)$pivot->quantity_on_hand <= 0) {
+                            $medicine = Medicine::find($item->medicine_id);
+                            $medName = $medicine ? ($medicine->brand_name ?? $medicine->generic_name) : "ID {$item->medicine_id}";
+                            throw new \InvalidArgumentException("Medicine '{$medName}' is currently out of stock.");
+                        }
+
+                        if ($qty > (int)$pivot->quantity_on_hand) {
+                            $medicine = Medicine::find($item->medicine_id);
+                            $medName = $medicine ? ($medicine->brand_name ?? $medicine->generic_name) : "ID {$item->medicine_id}";
+                            throw new \InvalidArgumentException("Insufficient stock for '{$medName}'. Only {$pivot->quantity_on_hand} available.");
+                        }
+
+                        // Server-side authoritative price: client price is completely ignored!
+                        $serverPrice = (float)$pivot->selling_price;
+                        if ($serverPrice <= 0) {
+                            $medicine = Medicine::find($item->medicine_id);
+                            $medName = $medicine ? ($medicine->brand_name ?? $medicine->generic_name) : "ID {$item->medicine_id}";
+                            throw new \InvalidArgumentException("Unable to determine a valid selling price for '{$medName}'.");
+                        }
+
+                        $lineSubtotal = round($serverPrice * $qty, 2);
+                        $subtotal += $lineSubtotal;
+
+                        $orderItemsData[] = [
+                            'medicine_id' => $item->medicine_id,
+                            'quantity' => $qty,
+                            'price' => $serverPrice,
+                        ];
+                    }
+                }
+
+                // Authoritative server-side delivery fee and total amount (client inputs are strictly ignored)
+                $deliveryFee = \App\Services\DeliveryService::calculateEstimatedDeliveryFee(
+                    isset($pharmacy->latitude) ? (float)$pharmacy->latitude : null,
+                    isset($pharmacy->longitude) ? (float)$pharmacy->longitude : null,
+                    $request->filled('latitude') ? (float)$request->latitude : null,
+                    $request->filled('longitude') ? (float)$request->longitude : null
+                );
+                $totalAmount = round($subtotal + $deliveryFee, 2);
+
+                $createdOrder = Order::create([
+                    'user_id' => $userId,
+                    'pharmacy_id' => $pharmacy->id,
+                    'status' => Order::STATUS_PENDING_CONFIRMATION,
+                    'total_amount' => $totalAmount,
+                    'delivery_fee' => $deliveryFee,
+                    'payment_method' => 'cod',
+                    'delivery_address' => $request->delivery_address,
+                    'latitude' => $request->latitude ?? 10.6402,
+                    'longitude' => $request->longitude ?? 122.9460,
+                ]);
+
+                foreach ($orderItemsData as $itemData) {
+                    $createdOrder->items()->create($itemData);
+                }
+
+                // Clear web cart if exists
+                if (empty($itemsPayload) && $userId) {
+                    CartItem::where('user_id', $userId)->delete();
+                }
+
+                return $createdOrder;
+            });
+        } catch (\InvalidArgumentException $e) {
+            if ($isApi) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => $e->getMessage(),
+                ], 422);
+            }
+            return redirect()->route('cart.index')->with('error', $e->getMessage());
+        } catch (\Throwable $e) {
+            Log::error('Order placement exception: ' . $e->getMessage(), [
+                'user_id' => $userId,
+                'pharmacy_id' => $pharmacy->id ?? null,
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            $safeMsg = 'Unable to complete the order. No changes were saved. Please try again.';
+            if ($isApi) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => $safeMsg,
+                ], 500);
+            }
+            return redirect()->route('cart.index')->with('error', $safeMsg);
         }
 
         // Notify pharmacy
-        $pharmacyUser = \App\Models\User::where('pharmacy_id', $pharmacyId)->first();
+        $pharmacyUser = \App\Models\User::where('pharmacy_id', $pharmacy->id)->first();
         if ($pharmacyUser) {
             try {
                 $pharmacyUser->notify(new \App\Notifications\NewOrderReceived($order));
@@ -235,6 +368,8 @@ class OrderController extends Controller
             'user_id' => $userId,
             'pharmacy_id' => $order->pharmacy_id,
             'driver_id' => $order->delivery?->driver_id ?? $order->delivery_partner_id,
+            'delivery_provider' => $order->delivery_provider ?? ($order->delivery ? 'georx_legacy' : null),
+            'delivery_booking_id' => $order->delivery_booking_id ?? $order->maxim_booking_id ?? null,
             'rating' => $request->rating,
             'comment' => $request->comment,
             // Delivery
@@ -428,6 +563,63 @@ class OrderController extends Controller
 
         if (!$isOrderCustomer && !$isAssignedDriver && !$isAdmin) {
             return response()->json(['error' => 'Unauthorized access to live delivery tracking.'], 403);
+        }
+
+        // Check for External Provider (Grab Express / Maxim)
+        if ($order->delivery_provider) {
+            $isGrab = $order->delivery_provider === 'grab';
+            $providerLabel = $isGrab ? 'Grab Express' : 'Maxim';
+            $pickupLat = (float)($order->pharmacy->latitude ?? 10.644508);
+            $pickupLng = (float)($order->pharmacy->longitude ?? 122.940537);
+            $deliveryLat = (float)($order->latitude ?? 10.6385);
+            $deliveryLng = (float)($order->longitude ?? 122.9520);
+
+            return response()->json([
+                'success'              => true,
+                'is_external_provider' => true,
+                'has_active_delivery'  => in_array($order->status, [
+                    \App\Models\Order::STATUS_ACCEPTED,
+                    \App\Models\Order::STATUS_AT_PHARMACY,
+                    \App\Models\Order::STATUS_PICKED_UP,
+                    'out_for_delivery',
+                ]),
+                'delivery_id'          => null,
+                'delivery_provider'    => $order->delivery_provider,
+                'delivery_provider_label' => $providerLabel,
+                'delivery_booking_id'  => $order->delivery_booking_id,
+                'delivery_tracking_url'=> $order->delivery_tracking_url,
+                'status'               => $order->delivery_status ?? $order->status,
+                'status_label'         => ucwords(str_replace('_', ' ', $order->delivery_status ?? $order->status)),
+                'driver'               => [
+                    'name'         => $order->driver_name ?? "{$providerLabel} Courier Rider",
+                    'phone'        => $order->driver_phone ?? 'Available in Provider App',
+                    'vehicle'      => $order->driver_vehicle ?? 'Motorcycle',
+                    'plate_number' => 'External Courier',
+                    'rating'       => '5.0',
+                    'avatar_url'   => 'https://ui-avatars.com/api/?name=' . urlencode($providerLabel) . '&background=0D9488&color=FFF&size=200',
+                    'is_external'  => true,
+                ],
+                'locations'            => [
+                    'driver'   => null,
+                    'pickup'   => [
+                        'pharmacy_name' => $order->pharmacy->name ?? 'Pharmacy',
+                        'latitude'      => $pickupLat,
+                        'longitude'     => $pickupLng,
+                    ],
+                    'delivery' => [
+                        'address'   => $order->delivery_address,
+                        'latitude'  => $deliveryLat,
+                        'longitude' => $deliveryLng,
+                    ],
+                ],
+                'last_location_at'     => null,
+                'timestamps'           => [
+                    'accepted_at' => $order->accepted_at ? $order->accepted_at->format('M d, Y g:i A') : null,
+                    'picked_up_at' => $order->picked_up_at ? $order->picked_up_at->format('M d, Y g:i A') : null,
+                    'delivered_at' => $order->delivered_at ? $order->delivered_at->format('M d, Y g:i A') : null,
+                ],
+                'is_stale'             => false,
+            ]);
         }
 
         $delivery = $order->delivery;

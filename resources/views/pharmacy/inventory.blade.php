@@ -534,25 +534,7 @@
                             <div class="sm:col-span-2 mt-2">
                                 <p class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 border-b border-slate-100 pb-2">3. Stock & Tracking</p>
                                 
-                                {{-- Box to Piece Auto-Converter (Edit) --}}
-                                <div class="bg-blue-50/50 border border-blue-100 rounded-2xl p-4 mb-4">
-                                    <div class="flex items-center gap-2 mb-2">
-                                        <input type="checkbox" id="edit_convert" class="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer" onchange="toggleConverter('edit')">
-                                        <label for="edit_convert" class="text-sm font-bold text-slate-700 cursor-pointer select-none">Stock by Box, Sell by Piece (Auto-Convert)</label>
-                                    </div>
-                                    <div id="edit_converter_box" class="hidden grid grid-cols-2 gap-4 pt-3 mt-1 border-t border-blue-100/50">
-                                        <div>
-                                            <label class="block text-[10px] font-black text-slate-500 uppercase mb-1">Number of Boxes</label>
-                                            <input type="number" id="edit_boxes" placeholder="e.g. 30" class="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 outline-none font-bold text-slate-700 transition-shadow" style="--tw-ring-color: {{ $pharmacy->theme_color ?? '#2563eb' }};" oninput="runConverter('edit')">
-                                        </div>
-                                        <div>
-                                            <label class="block text-[10px] font-black text-slate-500 uppercase mb-1">Pieces per Box</label>
-                                            <input type="number" id="edit_pieces" placeholder="e.g. 60" class="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 outline-none font-bold text-slate-700 transition-shadow" style="--tw-ring-color: {{ $pharmacy->theme_color ?? '#2563eb' }};" oninput="runConverter('edit')">
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                {{-- Box to Piece Auto-Converter --}}
+                                {{-- Box to Piece Auto-Converter (Add Modal) --}}
                                 <div class="bg-blue-50/50 border border-blue-100 rounded-2xl p-4 mb-4">
                                     <div class="flex items-center gap-2 mb-2">
                                         <input type="checkbox" id="existing_convert" class="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer" onchange="toggleConverter('existing')">
@@ -820,6 +802,25 @@
                     </div>
 
                     <p class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 border-b border-slate-100 pb-2">2. Stock Update</p>
+                    
+                    {{-- Box to Piece Auto-Converter (Edit Modal) --}}
+                    <div class="bg-blue-50/50 border border-blue-100 rounded-2xl p-4 mb-4">
+                        <div class="flex items-center gap-2 mb-2">
+                            <input type="checkbox" id="edit_convert" class="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer" onchange="toggleConverter('edit')">
+                            <label for="edit_convert" class="text-sm font-bold text-slate-700 cursor-pointer select-none">Stock by Box, Sell by Piece (Auto-Convert)</label>
+                        </div>
+                        <div id="edit_converter_box" class="hidden grid grid-cols-2 gap-4 pt-3 mt-1 border-t border-blue-100/50">
+                            <div>
+                                <label class="block text-[10px] font-black text-slate-500 uppercase mb-1">Number of Boxes</label>
+                                <input type="number" id="edit_boxes" placeholder="e.g. 30" class="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 outline-none font-bold text-slate-700 transition-shadow" style="--tw-ring-color: {{ $pharmacy->theme_color ?? '#2563eb' }};" oninput="runConverter('edit')">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-black text-slate-500 uppercase mb-1">Pieces per Box</label>
+                                <input type="number" id="edit_pieces" placeholder="e.g. 60" class="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 outline-none font-bold text-slate-700 transition-shadow" style="--tw-ring-color: {{ $pharmacy->theme_color ?? '#2563eb' }};" oninput="runConverter('edit')">
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="grid grid-cols-3 gap-5 mb-6">
                         <div>
                             <label for="edit_qty" class="block text-xs font-bold text-slate-600 mb-1.5">Current Qty *</label>
@@ -911,6 +912,13 @@
             input.value = newBatch;
         });
 
+        // Ensure Add modal converter starts reset
+        const existingConvert = document.getElementById('existing_convert');
+        if (existingConvert) {
+            existingConvert.checked = false;
+            toggleConverter('existing');
+        }
+
         document.getElementById('addInventoryModal').classList.remove('hidden');
     }
 
@@ -977,6 +985,13 @@
         // Trigger margin calculation with existing values
         calculateMargin('edit_selling', 'edit_purchase', 'margin_preview_edit');
         
+        // Ensure Edit modal converter starts reset
+        const editConvert = document.getElementById('edit_convert');
+        if (editConvert) {
+            editConvert.checked = false;
+            toggleConverter('edit');
+        }
+
         modal.classList.remove('hidden');
     }
 
@@ -1028,38 +1043,49 @@
     // Box-to-Piece Auto Converter Logic
     // =========================================================
     function toggleConverter(prefix) {
-        const isChecked = document.getElementById(prefix + '_convert').checked;
+        const checkbox = document.getElementById(prefix + '_convert');
         const box = document.getElementById(prefix + '_converter_box');
+        if (!checkbox || !box) return;
         
-        if (isChecked) {
+        if (checkbox.checked) {
             box.classList.remove('hidden');
         } else {
             box.classList.add('hidden');
-            document.getElementById(prefix + '_boxes').value = '';
-            document.getElementById(prefix + '_pieces').value = '';
+            const boxesEl = document.getElementById(prefix + '_boxes');
+            const piecesEl = document.getElementById(prefix + '_pieces');
+            if (boxesEl) boxesEl.value = '';
+            if (piecesEl) piecesEl.value = '';
         }
     }
 
     function runConverter(prefix) {
-        const boxes = parseFloat(document.getElementById(prefix + '_boxes').value) || 0;
-        const pieces = parseFloat(document.getElementById(prefix + '_pieces').value) || 0;
+        const boxesEl = document.getElementById(prefix + '_boxes');
+        const piecesEl = document.getElementById(prefix + '_pieces');
+        if (!boxesEl || !piecesEl) return;
+        
+        const boxes = parseFloat(boxesEl.value) || 0;
+        const pieces = parseFloat(piecesEl.value) || 0;
         
         if (boxes > 0 && pieces > 0) {
-            const total = boxes * pieces;
+            const total = Math.round(boxes * pieces);
             
             // Set the target quantity input and fire the input event just in case
             const qtyInput = document.getElementById(prefix + '_qty');
-            qtyInput.value = total;
-            
-            // Highlight it briefly so the user sees it change
-            qtyInput.classList.add('ring-2', 'ring-emerald-500', 'bg-emerald-50');
-            setTimeout(() => {
-                qtyInput.classList.remove('ring-2', 'ring-emerald-500', 'bg-emerald-50');
-            }, 800);
+            if (qtyInput) {
+                qtyInput.value = total;
+                
+                // Highlight it briefly so the user sees it change
+                qtyInput.classList.add('ring-2', 'ring-emerald-500', 'bg-emerald-50');
+                setTimeout(() => {
+                    qtyInput.classList.remove('ring-2', 'ring-emerald-500', 'bg-emerald-50');
+                }, 800);
+            }
 
             // Auto-force the unit type to Piece / Tablet
             const unitSelect = document.getElementById(prefix + '_unit');
-            unitSelect.value = 'Piece / Tablet';
+            if (unitSelect) {
+                unitSelect.value = 'Piece / Tablet';
+            }
         }
     }
 </script>

@@ -58,57 +58,109 @@
                 </div>
             </div>
 
-            <!-- Order & Pricing Section -->
+            <!-- Order & Delivery Pricing Section -->
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
                 <div class="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100">
                     <div class="bg-emerald-50 p-2.5 rounded-lg">
                         <i class="fas fa-peso-sign text-emerald-600"></i>
                     </div>
                     <div>
-                        <h3 class="font-black text-slate-800 text-sm">Order & Pricing</h3>
-                        <p class="text-slate-400 text-xs font-medium">Controls delivery fees applied to all orders.</p>
+                        <h3 class="font-black text-slate-800 text-sm">Delivery Estimation Parameters</h3>
+                        <p class="text-slate-400 text-xs font-medium">Controls the GEORX estimated delivery fee for patient checkout.</p>
                     </div>
                 </div>
 
-                <div class="space-y-5">
+                <div class="space-y-4">
                     <div>
-                        <label class="block text-xs font-black text-slate-600 uppercase tracking-wider mb-2">
-                            Base Delivery Fee (₱)
+                        <label class="block text-xs font-black text-slate-600 uppercase tracking-wider mb-1.5">
+                            Base Delivery Fee (₱) *
                         </label>
                         <div class="relative">
                             <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold text-sm">₱</span>
-                            <input type="number" name="base_delivery_fee" step="0.01" min="0"
+                            <input type="number" name="base_delivery_fee" step="0.01" min="0" required
                                 value="{{ old('base_delivery_fee', $settings->base_delivery_fee) }}"
-                                class="w-full border border-slate-200 rounded-xl pl-9 pr-4 py-3 text-slate-800 font-semibold text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50 hover:bg-white transition-colors">
+                                class="w-full border border-slate-200 rounded-xl pl-9 pr-4 py-2.5 text-slate-800 font-semibold text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50 hover:bg-white transition-colors">
                         </div>
-                        <p class="text-slate-400 text-xs mt-1.5">This flat fee is added to every order at checkout.</p>
+                        <p class="text-slate-400 text-[11px] mt-1">Default fee applied within Barangay Alijis base zone (up to 2.0 km).</p>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-black text-slate-600 uppercase tracking-wider mb-1.5">
+                                Additional Fee per km (₱)
+                            </label>
+                            <div class="relative">
+                                <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold text-sm">₱</span>
+                                <input type="number" name="delivery_per_km_fee" step="0.01" min="0"
+                                    value="{{ old('delivery_per_km_fee', $settings->delivery_per_km_fee ?? 0.0) }}"
+                                    class="w-full border border-slate-200 rounded-xl pl-9 pr-4 py-2.5 text-slate-800 font-semibold text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50 hover:bg-white transition-colors">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-black text-slate-600 uppercase tracking-wider mb-1.5">
+                                Minimum Fee (₱)
+                            </label>
+                            <div class="relative">
+                                <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold text-sm">₱</span>
+                                <input type="number" name="delivery_minimum_fee" step="0.01" min="0"
+                                    value="{{ old('delivery_minimum_fee', $settings->delivery_minimum_fee ?? 50.0) }}"
+                                    class="w-full border border-slate-200 rounded-xl pl-9 pr-4 py-2.5 text-slate-800 font-semibold text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50 hover:bg-white transition-colors">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-black text-slate-600 uppercase tracking-wider mb-1.5">
+                            Maximum Estimated Fee Cap (₱)
+                        </label>
+                        <div class="relative">
+                            <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold text-sm">₱</span>
+                            <input type="number" name="delivery_maximum_estimate" step="0.01" min="0"
+                                value="{{ old('delivery_maximum_estimate', $settings->delivery_maximum_estimate ?? 150.0) }}"
+                                class="w-full border border-slate-200 rounded-xl pl-9 pr-4 py-2.5 text-slate-800 font-semibold text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50 hover:bg-white transition-colors">
+                        </div>
                     </div>
                 </div>
             </div>
 
             <!-- System Controls Section -->
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 lg:col-span-2">
-                <div class="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100">
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 lg:col-span-2 space-y-4">
+                <div class="flex items-center gap-3 pb-4 border-b border-slate-100">
                     <div class="bg-amber-50 p-2.5 rounded-lg">
                         <i class="fas fa-toggle-on text-amber-600"></i>
                     </div>
                     <div>
                         <h3 class="font-black text-slate-800 text-sm">System Controls</h3>
-                        <p class="text-slate-400 text-xs font-medium">Toggle system-wide features on or off.</p>
+                        <p class="text-slate-400 text-xs font-medium">Toggle platform features on or off.</p>
                     </div>
                 </div>
 
-                <label class="flex items-start gap-4 cursor-pointer group">
-                    <div class="relative mt-0.5 shrink-0">
-                        <input type="checkbox" name="enable_new_registrations" id="enable_registrations" class="sr-only peer"
-                            {{ $settings->enable_new_registrations ? 'checked' : '' }}>
-                        <div class="w-12 h-6 bg-slate-200 rounded-full peer peer-checked:bg-emerald-500 transition-colors duration-200 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:w-5 after:h-5 after:rounded-full after:shadow after:transition-all peer-checked:after:translate-x-6"></div>
-                    </div>
-                    <div>
-                        <p class="font-bold text-slate-800 text-sm group-hover:text-slate-900 transition-colors">Allow New Pharmacy Registrations</p>
-                        <p class="text-slate-400 text-xs font-medium mt-0.5">When off, the Pharmacy Register link will be hidden and new applications will not be accepted.</p>
-                    </div>
-                </label>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <label class="flex items-start gap-4 cursor-pointer group p-3 rounded-xl border border-slate-100 hover:border-slate-200 transition">
+                        <div class="relative mt-0.5 shrink-0">
+                            <input type="checkbox" name="delivery_estimate_enabled" class="sr-only peer"
+                                {{ $settings->delivery_estimate_enabled ? 'checked' : '' }}>
+                            <div class="w-12 h-6 bg-slate-200 rounded-full peer peer-checked:bg-emerald-500 transition-colors duration-200 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:w-5 after:h-5 after:rounded-full after:shadow after:transition-all peer-checked:after:translate-x-6"></div>
+                        </div>
+                        <div>
+                            <p class="font-bold text-slate-800 text-sm group-hover:text-slate-900 transition-colors">Distance-Based Delivery Estimation</p>
+                            <p class="text-slate-400 text-xs font-medium mt-0.5">When enabled, calculates fee using distance between pharmacy and patient address.</p>
+                        </div>
+                    </label>
+
+                    <label class="flex items-start gap-4 cursor-pointer group p-3 rounded-xl border border-slate-100 hover:border-slate-200 transition">
+                        <div class="relative mt-0.5 shrink-0">
+                            <input type="checkbox" name="enable_new_registrations" id="enable_registrations" class="sr-only peer"
+                                {{ $settings->enable_new_registrations ? 'checked' : '' }}>
+                            <div class="w-12 h-6 bg-slate-200 rounded-full peer peer-checked:bg-emerald-500 transition-colors duration-200 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:w-5 after:h-5 after:rounded-full after:shadow after:transition-all peer-checked:after:translate-x-6"></div>
+                        </div>
+                        <div>
+                            <p class="font-bold text-slate-800 text-sm group-hover:text-slate-900 transition-colors">Allow New Pharmacy Registrations</p>
+                            <p class="text-slate-400 text-xs font-medium mt-0.5">When off, the Pharmacy Register link will be hidden and new applications will not be accepted.</p>
+                        </div>
+                    </label>
+                </div>
             </div>
 
         </div>

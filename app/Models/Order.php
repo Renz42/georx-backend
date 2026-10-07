@@ -12,22 +12,32 @@ class Order extends Model
     // Status Constants
     public const STATUS_PENDING_CONFIRMATION = 'pending_confirmation';
     public const STATUS_CONFIRMED = 'confirmed';
-    public const STATUS_PENDING = 'pending'; // Finding rider
-    public const STATUS_ACCEPTED = 'accepted'; // Rider assigned
+    public const STATUS_PENDING = 'pending'; // Ready for external dispatch
+    public const STATUS_ACCEPTED = 'accepted'; // Dispatched to external courier
     public const STATUS_AT_PHARMACY = 'at_pharmacy';
     public const STATUS_PICKED_UP = 'picked_up';
     public const STATUS_DELIVERED = 'delivered';
     public const STATUS_CANCELLED = 'cancelled';
     public const STATUS_REJECTED = 'rejected';
 
+    // Provider Constants
+    public const PROVIDER_GRAB = 'grab';
+    public const PROVIDER_MAXIM = 'maxim';
+
     protected $fillable = [
         'user_id',
         'pharmacy_id',
         'delivery_partner_id',
+        'delivery_provider',
+        'delivery_booking_id',
+        'delivery_tracking_url',
+        'delivery_status',
+        'delivery_booked_at',
         'status',
         'is_prepared',
         'total_amount',
         'delivery_fee',
+        'actual_courier_fee',
         'payment_method',
         'delivery_address',
         'latitude',
@@ -53,15 +63,36 @@ class Order extends Model
     protected $casts = [
         'pharmacy_confirmed' => 'boolean',
         'customer_confirmed_delivery' => 'boolean',
+        'actual_courier_fee' => 'decimal:2',
         'confirmed_at' => 'datetime',
         'accepted_at' => 'datetime',
         'picked_up_at' => 'datetime',
+        'delivery_booked_at' => 'datetime',
         'customer_confirmed_at' => 'datetime',
         'rejected_at' => 'datetime',
         'estimated_delivery_at' => 'datetime',
         'delivered_at' => 'datetime',
         'fifo_deductions' => 'array',
     ];
+
+    /**
+     * Interpret database UTC timestamp and present in application timezone (Asia/Manila).
+     */
+    public function getCreatedAtAttribute($value)
+    {
+        if (!$value) {
+            return null;
+        }
+        return \Carbon\Carbon::parse($value, 'UTC')->setTimezone(config('app.timezone', 'Asia/Manila'));
+    }
+
+    public function getUpdatedAtAttribute($value)
+    {
+        if (!$value) {
+            return null;
+        }
+        return \Carbon\Carbon::parse($value, 'UTC')->setTimezone(config('app.timezone', 'Asia/Manila'));
+    }
 
     public function user()
     {

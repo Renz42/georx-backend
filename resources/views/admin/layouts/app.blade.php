@@ -84,7 +84,9 @@
                 <a href="{{ route('admin.drivers') }}"
                    class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors {{ request()->routeIs('admin.drivers*') ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900' }}">
                     <i class="fas fa-motorcycle w-4 text-center {{ request()->routeIs('admin.drivers*') ? 'text-indigo-600' : 'text-slate-400' }}"></i>
-                    Drivers
+                    <span class="flex items-center gap-1.5">
+                        Drivers <span class="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-slate-200 text-slate-600">Archive</span>
+                    </span>
                 </a>
 
                 <a href="{{ route('admin.medicines') }}"

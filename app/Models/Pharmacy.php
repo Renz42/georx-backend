@@ -45,7 +45,16 @@ class Pharmacy extends Model
         'logo_url',
         'cover_photo_url',
         'is_currently_open',
+        'is_open',
     ];
+
+    /**
+     * Boolean accessor for mobile apps and quick status checks.
+     */
+    public function getIsOpenAttribute(): bool
+    {
+        return $this->is_currently_open === 'online';
+    }
 
     /**
      * Compute the effective open/closed/offline status.

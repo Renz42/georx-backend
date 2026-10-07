@@ -33,9 +33,16 @@ class GlobalSetting extends Model
      */
     public static function getSettings(): object
     {
+        $baseFee = (float) static::get('delivery_base_fee', static::get('base_delivery_fee', 50.0));
+
         return (object) [
-            'enable_new_registrations' => (bool) static::get('enable_new_registrations', true),
-            'base_delivery_fee'        => (float) static::get('base_delivery_fee', 50.0),
+            'enable_new_registrations'   => (bool) static::get('enable_new_registrations', true),
+            'base_delivery_fee'          => $baseFee,
+            'delivery_base_fee'          => $baseFee,
+            'delivery_per_km_fee'        => (float) static::get('delivery_per_km_fee', 0.0),
+            'delivery_minimum_fee'       => (float) static::get('delivery_minimum_fee', 50.0),
+            'delivery_maximum_estimate'  => (float) static::get('delivery_maximum_estimate', 150.0),
+            'delivery_estimate_enabled'  => (bool) static::get('delivery_estimate_enabled', true),
         ];
     }
 }

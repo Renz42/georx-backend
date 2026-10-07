@@ -104,4 +104,42 @@ class DeliveryService
 
         return round($earthRadiusKm * $c, 1);
     }
+
+    /**
+     * Calculate authoritative estimated delivery fee for GEORX order.
+     * Uses configurable Superadmin parameters from GlobalSetting.
+     *
+     * @param float|null $pickupLat
+     * @param float|null $pickupLng
+     * @param float|null $dropoffLat
+     * @param float|null $dropoffLng
+     * @return float Authoritative estimated delivery fee in PHP
+     */
+    public static function calculateEstimatedDeliveryFee(?float $pickupLat = null, ?float $pickupLng = null, ?float $dropoffLat = null, ?float $dropoffLng = null): float
+    {
+        $settings = \App\Models\GlobalSetting::getSettings();
+
+        $baseFee = (float)($settings->delivery_base_fee ?? $settings->base_delivery_fee ?? 50.00);
+        $perKmFee = (float)($settings->delivery_per_km_fee ?? 0.00);
+        $minFee = (float)($settings->delivery_minimum_fee ?? 50.00);
+        $maxFee = (float)($settings->delivery_maximum_estimate ?? 150.00);
+        $enabled = (bool)($settings->delivery_estimate_enabled ?? true);
+
+        if (!$enabled) {
+            return $minFee;
+        }
+
+        $distance = static::calculateDistance($pickupLat, $pickupLng, $dropoffLat, $dropoffLng);
+
+        // Standard Barangay Alijis base coverage is 2.0 km
+        if ($distance !== null && $distance > 2.0 && $perKmFee > 0) {
+            $extraDistance = $distance - 2.0;
+            $calculatedFee = $baseFee + ($extraDistance * $perKmFee);
+        } else {
+            $calculatedFee = $baseFee;
+        }
+
+        // Clamp between minimum and maximum bounds
+        return round(min($maxFee, max($minFee, $calculatedFee)), 2);
+    }
 }

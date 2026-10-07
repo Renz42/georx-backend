@@ -240,74 +240,105 @@ class PortalController extends Controller
     public function addToInventory(Request $request)
     {
         $pharmacy = $this->getMyPharmacy();
-        
-        // Updated to include all our new professional inventory fields
+        if (!$pharmacy) {
+            return redirect('/login')->with('error', 'No pharmacy associated with your account.');
+        }
+
         $validated = $request->validate([
-            'medicine_id' => 'required|exists:medicines,id',
-            'unit' => 'required|string', // Added unit validation
-            'selling_price' => 'required|numeric|min:0',
-            'purchase_price' => 'nullable|numeric|min:0',
-            'quantity_on_hand' => 'required|integer|min:0',
-            'reorder_level' => 'nullable|integer|min:0',
+            'medicine_id' => 'required|integer|exists:medicines,id',
+            'unit' => ['required', 'string', \Illuminate\Validation\Rule::in(['Piece / Tablet', 'Box', 'Bottle', 'Sachet', 'Vial / Ampule', 'Tube'])],
+            'selling_price' => 'required|numeric|min:0|max:999999.99',
+            'purchase_price' => 'nullable|numeric|min:0|max:999999.99',
+            'quantity_on_hand' => 'required|integer|min:0|max:1000000',
+            'reorder_level' => 'nullable|integer|min:0|max:1000000',
             'batch_number' => 'nullable|string|max:100',
             'expiration_date' => 'nullable|date',
             'storage_condition' => 'nullable|string|max:255',
             'supplier' => 'nullable|string|max:255',
             'last_restocked_at' => 'nullable|date',
+            'conversion_boxes' => 'nullable|integer|min:1|max:10000',
+            'conversion_pieces' => 'nullable|integer|min:1|max:10000',
         ]);
 
-        // Check if already exists in their store
-        if ($pharmacy->medicines()->where('medicine_id', $validated['medicine_id'])->exists()) {
-            return redirect('/portal/inventory')->with('error', 'Medicine already in inventory. Edit it instead.');
-        }
-
-        $pharmacy->medicines()->attach($validated['medicine_id'], [
-            'unit' => $validated['unit'],
-            'selling_price' => $validated['selling_price'],
-            'purchase_price' => $validated['purchase_price'] ?? null,
-            'quantity_on_hand' => $validated['quantity_on_hand'],
-            'reorder_level' => $validated['reorder_level'] ?? 10,
-            'batch_number' => $validated['batch_number'] ?? null,
-            'expiration_date' => $validated['expiration_date'] ?? null,
-            'storage_condition' => $validated['storage_condition'] ?? null,
-            'supplier' => $validated['supplier'] ?? null,
-            'last_restocked_at' => $validated['last_restocked_at'] ?? null,
-            'is_available' => $validated['quantity_on_hand'] > 0,
-        ]);
-
-        if ($validated['quantity_on_hand'] > 0 || !empty($validated['batch_number'])) {
-            app(\App\Services\InventoryService::class)->addBatch($pharmacy->id, $validated['medicine_id'], [
-                'batch_number' => $validated['batch_number'] ?? ('BATCH-' . strtoupper(\Illuminate\Support\Str::random(6))),
-                'expiration_date' => $validated['expiration_date'] ?? null,
-                'quantity' => $validated['quantity_on_hand'],
-                'purchase_price' => $validated['purchase_price'] ?? null,
-                'storage_condition' => $validated['storage_condition'] ?? null,
-                'supplier' => $validated['supplier'] ?? null,
-            ]);
-        }
-
-        \App\Models\AuditLog::create([
-            'pharmacy_id' => $pharmacy->id,
-            'user_id' => Auth::id(),
-            'action' => 'Added to Inventory',
-            'details' => "Added medicine ID {$validated['medicine_id']} to inventory. Initial stock: {$validated['quantity_on_hand']}, Price: {$validated['selling_price']}",
-        ]);
-
-        if ($validated['quantity_on_hand'] > 0) {
-            if(class_exists(\App\Models\StockAlert::class)) {
-                \App\Models\StockAlert::checkAndNotify($pharmacy->id, $validated['medicine_id']);
+        // Server-side box conversion validation: enforce authoritative calculation
+        if ($request->filled('conversion_boxes') && $request->filled('conversion_pieces')) {
+            $expectedQty = (int)$validated['conversion_boxes'] * (int)$validated['conversion_pieces'];
+            if ((int)$validated['quantity_on_hand'] !== $expectedQty) {
+                $validated['quantity_on_hand'] = $expectedQty;
             }
+        }
+
+        try {
+            \Illuminate\Support\Facades\DB::transaction(function () use ($pharmacy, $validated) {
+                // Check if already exists in their store (pessimistic check inside transaction)
+                if ($pharmacy->medicines()->where('medicines.id', $validated['medicine_id'])->exists()) {
+                    throw new \InvalidArgumentException('Medicine already in inventory. Edit it instead.');
+                }
+
+                $pharmacy->medicines()->attach($validated['medicine_id'], [
+                    'unit' => $validated['unit'],
+                    'selling_price' => $validated['selling_price'],
+                    'purchase_price' => $validated['purchase_price'] ?? null,
+                    'quantity_on_hand' => $validated['quantity_on_hand'],
+                    'reorder_level' => $validated['reorder_level'] ?? 10,
+                    'batch_number' => $validated['batch_number'] ?? null,
+                    'expiration_date' => $validated['expiration_date'] ?? null,
+                    'storage_condition' => $validated['storage_condition'] ?? null,
+                    'supplier' => $validated['supplier'] ?? null,
+                    'last_restocked_at' => $validated['last_restocked_at'] ?? null,
+                    'is_available' => $validated['quantity_on_hand'] > 0,
+                ]);
+
+                if ($validated['quantity_on_hand'] > 0 || !empty($validated['batch_number'])) {
+                    app(\App\Services\InventoryService::class)->addBatch($pharmacy->id, $validated['medicine_id'], [
+                        'batch_number' => $validated['batch_number'] ?? ('BATCH-' . strtoupper(\Illuminate\Support\Str::random(6))),
+                        'expiration_date' => $validated['expiration_date'] ?? null,
+                        'quantity' => $validated['quantity_on_hand'],
+                        'purchase_price' => $validated['purchase_price'] ?? null,
+                        'storage_condition' => $validated['storage_condition'] ?? null,
+                        'supplier' => $validated['supplier'] ?? null,
+                    ]);
+                }
+
+                \App\Models\AuditLog::create([
+                    'pharmacy_id' => $pharmacy->id,
+                    'user_id' => Auth::id(),
+                    'action' => 'Added to Inventory',
+                    'details' => "Added medicine ID {$validated['medicine_id']} to inventory. Initial stock: {$validated['quantity_on_hand']}, Price: {$validated['selling_price']}",
+                ]);
+
+                if ($validated['quantity_on_hand'] > 0) {
+                    if (class_exists(\App\Models\StockAlert::class)) {
+                        \App\Models\StockAlert::checkAndNotify($pharmacy->id, $validated['medicine_id']);
+                    }
+                }
+            });
+        } catch (\InvalidArgumentException $e) {
+            return redirect('/portal/inventory')->with('error', $e->getMessage());
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Inventory addition failed: ' . $e->getMessage(), [
+                'pharmacy_id' => $pharmacy->id,
+                'medicine_id' => $validated['medicine_id'],
+                'exception' => $e,
+            ]);
+            return redirect('/portal/inventory')->with('error', 'Unable to add medicine to inventory. No inventory changes were saved. Please try again.');
         }
 
         return redirect('/portal/inventory')->with('success', 'Medicine added to inventory!');
     }
 
-    // Fetch batch details for a medicine
+    // Fetch batch details for a medicine (Scoped to authenticated pharmacy)
     public function batchDetails($medicineId)
     {
         $pharmacy = $this->getMyPharmacy();
         if (!$pharmacy) {
             return response()->json(['error' => 'Pharmacy not found.'], 404);
+        }
+
+        // Ownership IDOR protection
+        $exists = $pharmacy->medicines()->where('medicines.id', $medicineId)->exists();
+        if (!$exists) {
+            return response()->json(['error' => 'Medicine not found in your inventory.'], 404);
         }
 
         $batches = \App\Models\InventoryBatch::where('pharmacy_id', $pharmacy->id)
@@ -321,7 +352,7 @@ class PortalController extends Controller
         ]);
     }
 
-    // Add batch to existing medicine
+    // Add batch to existing medicine (Scoped to authenticated pharmacy)
     public function addBatch(Request $request)
     {
         $pharmacy = $this->getMyPharmacy();
@@ -330,16 +361,31 @@ class PortalController extends Controller
         }
 
         $validated = $request->validate([
-            'medicine_id' => 'required|exists:medicines,id',
+            'medicine_id' => 'required|integer|exists:medicines,id',
             'batch_number' => 'required|string|max:100',
             'expiration_date' => 'required|date',
-            'quantity' => 'required|integer|min:1',
-            'purchase_price' => 'nullable|numeric|min:0',
+            'quantity' => 'required|integer|min:1|max:1000000',
+            'purchase_price' => 'nullable|numeric|min:0|max:999999.99',
             'storage_condition' => 'nullable|string|max:255',
             'supplier' => 'nullable|string|max:255',
         ]);
 
-        app(\App\Services\InventoryService::class)->addBatch($pharmacy->id, $validated['medicine_id'], $validated);
+        // Ownership IDOR protection
+        $exists = $pharmacy->medicines()->where('medicines.id', $validated['medicine_id'])->exists();
+        if (!$exists) {
+            return back()->with('error', 'Medicine not found in your inventory.');
+        }
+
+        try {
+            app(\App\Services\InventoryService::class)->addBatch($pharmacy->id, $validated['medicine_id'], $validated);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Batch addition failed: ' . $e->getMessage(), [
+                'pharmacy_id' => $pharmacy->id,
+                'medicine_id' => $validated['medicine_id'],
+                'exception' => $e,
+            ]);
+            return back()->with('error', 'Unable to add stock batch. Please try again.');
+        }
 
         return back()->with('success', 'New stock batch added successfully!');
     }
@@ -390,6 +436,9 @@ class PortalController extends Controller
     public function storeNewMedicine(Request $request)
     {
         $pharmacy = $this->getMyPharmacy();
+        if (!$pharmacy) {
+            return redirect('/login')->with('error', 'No pharmacy associated with your account.');
+        }
 
         $validated = $request->validate([
             // 1. Global Medicine Fields
@@ -404,17 +453,26 @@ class PortalController extends Controller
             'image' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:2048', 
 
             // 2. Local Inventory Fields (Specific to this pharmacy)
-            'unit' => 'required|string', 
-            'selling_price' => 'required|numeric|min:0',
-            'purchase_price' => 'nullable|numeric|min:0',
-            'quantity_on_hand' => 'required|integer|min:0',
-            'reorder_level' => 'nullable|integer|min:0',
+            'unit' => ['required', 'string', \Illuminate\Validation\Rule::in(['Piece / Tablet', 'Box', 'Bottle', 'Sachet', 'Vial / Ampule', 'Tube'])],
+            'selling_price' => 'required|numeric|min:0|max:999999.99',
+            'purchase_price' => 'nullable|numeric|min:0|max:999999.99',
+            'quantity_on_hand' => 'required|integer|min:0|max:1000000',
+            'reorder_level' => 'nullable|integer|min:0|max:1000000',
             'batch_number' => 'nullable|string|max:100',
             'expiration_date' => 'nullable|date',
             'storage_condition' => 'nullable|string|max:255',
             'supplier' => 'nullable|string|max:255',
             'last_restocked_at' => 'nullable|date',
+            'conversion_boxes' => 'nullable|integer|min:1|max:10000',
+            'conversion_pieces' => 'nullable|integer|min:1|max:10000',
         ]);
+
+        if ($request->filled('conversion_boxes') && $request->filled('conversion_pieces')) {
+            $expectedQty = (int)$validated['conversion_boxes'] * (int)$validated['conversion_pieces'];
+            if ((int)$validated['quantity_on_hand'] !== $expectedQty) {
+                $validated['quantity_on_hand'] = $expectedQty;
+            }
+        }
 
         // Handle Image Upload if provided during new medicine creation
         $imagePath = null;
@@ -423,118 +481,183 @@ class PortalController extends Controller
             $imagePath = $storageService->upload($request->file('image'), \App\Services\SupabaseStorageService::BUCKET_MEDICINE_IMAGES);
         }
 
-        // Step A: Create the global medicine record
-        $nameForSlug = $validated['brand_name'] ?? $validated['generic_name'];
-        
-        $medicine = Medicine::create([
-            'slug' => \Illuminate\Support\Str::slug($nameForSlug) . '-' . \Illuminate\Support\Str::random(5),
-            'generic_name' => $validated['generic_name'],
-            'brand_name' => $validated['brand_name'] ?? null,
-            'drug_category' => $validated['drug_category'] ?? null,
-            'primary_use' => $validated['primary_use'] ?? null,
-            'dosage_form' => $validated['dosage_form'] ?? null,
-            'strength' => $validated['strength'] ?? null,
-            'description' => $validated['description'] ?? null,
-            'prescription_required' => $request->boolean('prescription_required'),
-            'image' => $imagePath, // Save the image path
-        ]);
+        try {
+            \Illuminate\Support\Facades\DB::transaction(function () use ($pharmacy, $validated, $imagePath, $request) {
+                $nameForSlug = $validated['brand_name'] ?? $validated['generic_name'];
+                
+                $medicine = Medicine::create([
+                    'slug' => \Illuminate\Support\Str::slug($nameForSlug) . '-' . \Illuminate\Support\Str::random(5),
+                    'generic_name' => $validated['generic_name'],
+                    'brand_name' => $validated['brand_name'] ?? null,
+                    'drug_category' => $validated['drug_category'] ?? null,
+                    'primary_use' => $validated['primary_use'] ?? null,
+                    'dosage_form' => $validated['dosage_form'] ?? null,
+                    'strength' => $validated['strength'] ?? null,
+                    'description' => $validated['description'] ?? null,
+                    'prescription_required' => $request->boolean('prescription_required'),
+                    'image' => $imagePath,
+                ]);
 
-        // Step B: Attach it to this specific pharmacy
-        $pharmacy->medicines()->attach($medicine->id, [
-            'unit' => $validated['unit'], 
-            'selling_price' => $validated['selling_price'],
-            'purchase_price' => $validated['purchase_price'] ?? null,
-            'quantity_on_hand' => $validated['quantity_on_hand'],
-            'reorder_level' => $validated['reorder_level'] ?? 10,
-            'batch_number' => $validated['batch_number'] ?? null,
-            'expiration_date' => $validated['expiration_date'] ?? null,
-            'storage_condition' => $validated['storage_condition'] ?? null,
-            'supplier' => $validated['supplier'] ?? null,
-            'last_restocked_at' => $validated['last_restocked_at'] ?? null,
-            'is_available' => $validated['quantity_on_hand'] > 0,
-        ]);
+                $pharmacy->medicines()->attach($medicine->id, [
+                    'unit' => $validated['unit'], 
+                    'selling_price' => $validated['selling_price'],
+                    'purchase_price' => $validated['purchase_price'] ?? null,
+                    'quantity_on_hand' => $validated['quantity_on_hand'],
+                    'reorder_level' => $validated['reorder_level'] ?? 10,
+                    'batch_number' => $validated['batch_number'] ?? null,
+                    'expiration_date' => $validated['expiration_date'] ?? null,
+                    'storage_condition' => $validated['storage_condition'] ?? null,
+                    'supplier' => $validated['supplier'] ?? null,
+                    'last_restocked_at' => $validated['last_restocked_at'] ?? null,
+                    'is_available' => $validated['quantity_on_hand'] > 0,
+                ]);
 
-        if ($validated['quantity_on_hand'] > 0 || !empty($validated['batch_number'])) {
-            app(\App\Services\InventoryService::class)->addBatch($pharmacy->id, $medicine->id, [
-                'batch_number' => $validated['batch_number'] ?? ('BATCH-' . strtoupper(\Illuminate\Support\Str::random(6))),
-                'expiration_date' => $validated['expiration_date'] ?? null,
-                'quantity' => $validated['quantity_on_hand'],
-                'purchase_price' => $validated['purchase_price'] ?? null,
-                'storage_condition' => $validated['storage_condition'] ?? null,
-                'supplier' => $validated['supplier'] ?? null,
+                if ($validated['quantity_on_hand'] > 0 || !empty($validated['batch_number'])) {
+                    app(\App\Services\InventoryService::class)->addBatch($pharmacy->id, $medicine->id, [
+                        'batch_number' => $validated['batch_number'] ?? ('BATCH-' . strtoupper(\Illuminate\Support\Str::random(6))),
+                        'expiration_date' => $validated['expiration_date'] ?? null,
+                        'quantity' => $validated['quantity_on_hand'],
+                        'purchase_price' => $validated['purchase_price'] ?? null,
+                        'storage_condition' => $validated['storage_condition'] ?? null,
+                        'supplier' => $validated['supplier'] ?? null,
+                    ]);
+                }
+
+                \App\Models\AuditLog::create([
+                    'pharmacy_id' => $pharmacy->id,
+                    'user_id' => Auth::id(),
+                    'action' => 'Created New Medicine',
+                    'details' => "Created new medicine '{$validated['generic_name']}' and added to inventory. Stock: {$validated['quantity_on_hand']}",
+                ]);
+            });
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Create new medicine failed: ' . $e->getMessage(), [
+                'pharmacy_id' => $pharmacy->id,
+                'exception' => $e,
             ]);
+            return redirect('/portal/inventory')->with('error', 'Unable to create and stock new medicine. Please try again.');
         }
-
-        \App\Models\AuditLog::create([
-            'pharmacy_id' => $pharmacy->id,
-            'user_id' => Auth::id(),
-            'action' => 'Created New Medicine',
-            'details' => "Created new medicine '{$validated['generic_name']}' and added to inventory. Stock: {$validated['quantity_on_hand']}",
-        ]);
 
         return redirect('/portal/inventory')->with('success', 'New medicine created and added to your stock!');
     }
 
-    // Update inventory item
+    // Update inventory item (Scoped to authenticated pharmacy)
     public function updateInventoryItem(Request $request, $medicineId)
     {
         $pharmacy = $this->getMyPharmacy();
-        
+        if (!$pharmacy) {
+            return redirect('/login')->with('error', 'No pharmacy associated with your account.');
+        }
+
+        // Ownership IDOR protection
+        $existing = $pharmacy->medicines()->where('medicines.id', $medicineId)->first();
+        if (!$existing) {
+            return redirect('/portal/inventory')->with('error', 'Medicine not found in your inventory.');
+        }
+
         $validated = $request->validate([
-            'unit' => 'required|string', 
-            'selling_price' => 'required|numeric|min:0',
-            'purchase_price' => 'nullable|numeric|min:0',
-            'quantity_on_hand' => 'required|integer|min:0',
-            'reorder_level' => 'nullable|integer|min:0',
+            'unit' => ['required', 'string', \Illuminate\Validation\Rule::in(['Piece / Tablet', 'Box', 'Bottle', 'Sachet', 'Vial / Ampule', 'Tube'])],
+            'selling_price' => 'required|numeric|min:0|max:999999.99',
+            'purchase_price' => 'nullable|numeric|min:0|max:999999.99',
+            'quantity_on_hand' => 'required|integer|min:0|max:1000000',
+            'reorder_level' => 'nullable|integer|min:0|max:1000000',
             'batch_number' => 'nullable|string|max:100',
             'expiration_date' => 'nullable|date',
             'storage_condition' => 'nullable|string|max:255',
             'supplier' => 'nullable|string|max:255',
             'last_restocked_at' => 'nullable|date',
+            'conversion_boxes' => 'nullable|integer|min:1|max:10000',
+            'conversion_pieces' => 'nullable|integer|min:1|max:10000',
         ]);
 
-        // Get old stock to check if it was out of stock
-        $oldStock = $pharmacy->medicines()->where('medicines.id', $medicineId)->first()?->pivot->quantity_on_hand ?? 0;
+        if ($request->filled('conversion_boxes') && $request->filled('conversion_pieces')) {
+            $expectedQty = (int)$validated['conversion_boxes'] * (int)$validated['conversion_pieces'];
+            if ((int)$validated['quantity_on_hand'] !== $expectedQty) {
+                $validated['quantity_on_hand'] = $expectedQty;
+            }
+        }
 
-        $pharmacy->medicines()->updateExistingPivot($medicineId, [
-            'unit' => $validated['unit'], 
-            'selling_price' => $validated['selling_price'],
-            'purchase_price' => $validated['purchase_price'] ?? null,
-            'quantity_on_hand' => $validated['quantity_on_hand'],
-            'reorder_level' => $validated['reorder_level'] ?? 10,
-            'batch_number' => $validated['batch_number'] ?? null,
-            'expiration_date' => $validated['expiration_date'] ?? null,
-            'storage_condition' => $validated['storage_condition'] ?? null,
-            'supplier' => $validated['supplier'] ?? null,
-            'last_restocked_at' => $validated['last_restocked_at'] ?? null,
-            'is_available' => $validated['quantity_on_hand'] > 0,
-        ]);
+        $oldStock = $existing->pivot->quantity_on_hand ?? 0;
 
-        $medicineName = \App\Models\Medicine::find($medicineId)->generic_name;
-        \App\Models\AuditLog::create([
-            'pharmacy_id' => $pharmacy->id,
-            'user_id' => Auth::id(),
-            'action' => 'Updated Inventory Item',
-            'details' => "Updated '{$medicineName}'. Old stock: {$oldStock}, New stock: {$validated['quantity_on_hand']}. Price: {$validated['selling_price']}",
-        ]);
+        try {
+            \Illuminate\Support\Facades\DB::transaction(function () use ($pharmacy, $medicineId, $validated, $oldStock, $existing) {
+                $pharmacy->medicines()->updateExistingPivot($medicineId, [
+                    'unit' => $validated['unit'], 
+                    'selling_price' => $validated['selling_price'],
+                    'purchase_price' => $validated['purchase_price'] ?? null,
+                    'quantity_on_hand' => $validated['quantity_on_hand'],
+                    'reorder_level' => $validated['reorder_level'] ?? 10,
+                    'batch_number' => $validated['batch_number'] ?? null,
+                    'expiration_date' => $validated['expiration_date'] ?? null,
+                    'storage_condition' => $validated['storage_condition'] ?? null,
+                    'supplier' => $validated['supplier'] ?? null,
+                    'last_restocked_at' => $validated['last_restocked_at'] ?? null,
+                    'is_available' => $validated['quantity_on_hand'] > 0,
+                ]);
 
-        // ==============================================================
-        // ✅ THE FIX: SEND THE RESTOCK NOTIFICATION TO ALL SUBSCRIBED USERS
-        // ==============================================================
-        if ($oldStock == 0 && $validated['quantity_on_hand'] > 0) {
-            \App\Models\StockAlert::checkAndNotify($pharmacy->id, $medicineId);
-        } elseif ($oldStock > 0 && $validated['quantity_on_hand'] == 0) {
-            \App\Models\StockAlert::notifyOutOfStock($pharmacy->id, $medicineId);
+                $medicineName = $existing->generic_name ?? $existing->brand_name ?? "Medicine #{$medicineId}";
+                \App\Models\AuditLog::create([
+                    'pharmacy_id' => $pharmacy->id,
+                    'user_id' => Auth::id(),
+                    'action' => 'Updated Inventory Item',
+                    'details' => "Updated '{$medicineName}'. Old stock: {$oldStock}, New stock: {$validated['quantity_on_hand']}. Price: {$validated['selling_price']}",
+                ]);
+
+                if ($oldStock == 0 && $validated['quantity_on_hand'] > 0) {
+                    if (class_exists(\App\Models\StockAlert::class)) {
+                        \App\Models\StockAlert::checkAndNotify($pharmacy->id, $medicineId);
+                    }
+                } elseif ($oldStock > 0 && $validated['quantity_on_hand'] == 0) {
+                    if (class_exists(\App\Models\StockAlert::class)) {
+                        \App\Models\StockAlert::notifyOutOfStock($pharmacy->id, $medicineId);
+                    }
+                }
+            });
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Inventory update failed: ' . $e->getMessage(), [
+                'pharmacy_id' => $pharmacy->id,
+                'medicine_id' => $medicineId,
+                'exception' => $e,
+            ]);
+            return redirect('/portal/inventory')->with('error', 'Unable to update inventory. No changes were saved. Please try again.');
         }
 
         return redirect('/portal/inventory')->with('success', 'Inventory updated!');
     }
 
-    // Remove from inventory
+    // Remove from inventory (Scoped to authenticated pharmacy)
     public function removeFromInventory($medicineId)
     {
         $pharmacy = $this->getMyPharmacy();
-        $pharmacy->medicines()->detach($medicineId);
+        if (!$pharmacy) {
+            return redirect('/login')->with('error', 'No pharmacy associated with your account.');
+        }
+
+        // Ownership IDOR protection
+        $exists = $pharmacy->medicines()->where('medicines.id', $medicineId)->exists();
+        if (!$exists) {
+            return redirect('/portal/inventory')->with('error', 'Medicine not found in your inventory.');
+        }
+
+        try {
+            \Illuminate\Support\Facades\DB::transaction(function () use ($pharmacy, $medicineId) {
+                $pharmacy->medicines()->detach($medicineId);
+                
+                \App\Models\AuditLog::create([
+                    'pharmacy_id' => $pharmacy->id,
+                    'user_id' => Auth::id(),
+                    'action' => 'Removed From Inventory',
+                    'details' => "Removed medicine ID {$medicineId} from pharmacy inventory.",
+                ]);
+            });
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Remove from inventory failed: ' . $e->getMessage(), [
+                'pharmacy_id' => $pharmacy->id,
+                'medicine_id' => $medicineId,
+                'exception' => $e,
+            ]);
+            return redirect('/portal/inventory')->with('error', 'Unable to remove medicine from inventory. Please try again.');
+        }
 
         return redirect('/portal/inventory')->with('success', 'Medicine removed from inventory.');
     }
@@ -743,7 +866,7 @@ class PortalController extends Controller
         $filter = $request->get('status', 'all');
 
         $query = \App\Models\Order::where('pharmacy_id', $pharmacy->id)
-            ->with(['user', 'items.medicine', 'delivery.driver.driverProfile', 'deliveryPartner.driverProfile'])
+            ->with(['user', 'pharmacy', 'items.medicine', 'delivery.driver.driverProfile', 'deliveryPartner.driverProfile'])
             ->orderByDesc('created_at');
 
         if ($filter !== 'all') {
@@ -781,33 +904,20 @@ class PortalController extends Controller
         }
 
         $order->update([
-            'status' => \App\Models\Order::STATUS_PENDING, // Now waiting for rider
+            'status' => \App\Models\Order::STATUS_PENDING, // Waiting for pharmacy preparation and courier dispatch
             'pharmacy_confirmed' => true,
             'confirmed_at' => now(),
             'fifo_deductions' => $allDeductions
         ]);
 
-        // Create official GEORX Delivery Booking
-        try {
-            $deliveryService->createDeliveryForOrder($order);
-        } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error("Failed to create delivery booking for order #{$order->id}: " . $e->getMessage());
-        }
-
-        // Send to Maxim API
-        $booking = $maximService->createBooking($order);
-
-        if ($booking['success']) {
-            $order->update([
-                'maxim_booking_id' => $booking['booking_id'],
-                'maxim_tracking_url' => $booking['tracking_url'] ?? null,
-            ]);
-        }
-
         // Notify user
-        $order->user->notify(new \App\Notifications\OrderStatusChanged($order, 'Your order has been confirmed by the pharmacy and a rider is being assigned.', 'fas fa-check-circle text-emerald-500'));
+        $order->user->notify(new \App\Notifications\OrderStatusChanged(
+            $order,
+            'Your order has been confirmed by the pharmacy and is being prepared.',
+            'fas fa-check-circle text-emerald-500'
+        ));
 
-        return back()->with('success', 'Order #' . $order->id . ' confirmed! Rider delivery booking is now available.');
+        return back()->with('success', 'Order #' . $order->id . ' confirmed! You may now prepare the items and dispatch via Grab Express or Maxim.');
     }
 
     public function rejectOrder(Request $request, $id)
@@ -842,8 +952,113 @@ class PortalController extends Controller
 
         $order->update(['is_prepared' => true]);
         
-        $order->user->notify(new \App\Notifications\OrderStatusChanged($order, 'Your order is prepared and ready for pickup!', 'fas fa-box text-blue-500'));
+        $order->user->notify(new \App\Notifications\OrderStatusChanged(
+            $order,
+            'Your order is prepared and ready for delivery courier pickup!',
+            'fas fa-box text-blue-500'
+        ));
 
-        return back()->with('success', 'Order #' . $order->id . ' marked as prepared and ready for pickup.');
+        return back()->with('success', 'Order #' . $order->id . ' marked as prepared! You may now book and dispatch via Grab Express or Maxim.');
+    }
+
+    /**
+     * Book external delivery via Grab Express or Maxim
+     */
+    public function bookDelivery(Request $request, $id)
+    {
+        $pharmacy = $this->getMyPharmacy();
+        $order = \App\Models\Order::where('id', $id)
+            ->where('pharmacy_id', $pharmacy->id)
+            ->with('user')
+            ->firstOrFail();
+
+        $validated = $request->validate([
+            'delivery_provider'    => 'required|string|in:grab,maxim',
+            'delivery_booking_id'  => 'required|string|max:100',
+            'delivery_tracking_url'=> 'nullable|url|max:1000',
+            'actual_courier_fee'   => 'nullable|numeric|min:0|max:10000',
+            'driver_name'          => 'nullable|string|max:100',
+            'driver_phone'         => 'nullable|string|max:30',
+            'driver_vehicle'       => 'nullable|string|max:100',
+        ]);
+
+        $order->update([
+            'delivery_provider'     => $validated['delivery_provider'],
+            'delivery_booking_id'   => $validated['delivery_booking_id'],
+            'delivery_tracking_url' => $validated['delivery_tracking_url'] ?? null,
+            'actual_courier_fee'    => isset($validated['actual_courier_fee']) ? (float)$validated['actual_courier_fee'] : null,
+            'delivery_status'       => 'booked',
+            'delivery_booked_at'    => now(),
+            'driver_name'           => $validated['driver_name'] ?? null,
+            'driver_phone'          => $validated['driver_phone'] ?? null,
+            'driver_vehicle'        => $validated['driver_vehicle'] ?? null,
+            'status'                => \App\Models\Order::STATUS_ACCEPTED,
+            'accepted_at'           => now(),
+        ]);
+
+        $providerLabel = $validated['delivery_provider'] === 'grab' ? 'Grab Express' : 'Maxim';
+
+        // Notify patient
+        $order->user->notify(new \App\Notifications\OrderStatusChanged(
+            $order,
+            "Your order has been booked with {$providerLabel}! Booking Ref: {$validated['delivery_booking_id']}",
+            'fas fa-shipping-fast text-emerald-500'
+        ));
+
+        return back()->with('success', "Order #{$order->id} successfully dispatched via {$providerLabel}! Booking Reference: {$validated['delivery_booking_id']}");
+    }
+
+    /**
+     * Update external delivery status (in_transit or delivered)
+     */
+    public function updateDeliveryStatus(Request $request, $id)
+    {
+        $pharmacy = $this->getMyPharmacy();
+        $order = \App\Models\Order::where('id', $id)
+            ->where('pharmacy_id', $pharmacy->id)
+            ->with('user')
+            ->firstOrFail();
+
+        $validated = $request->validate([
+            'status' => 'required|in:in_transit,delivered'
+        ]);
+
+        $providerLabel = $order->delivery_provider === 'grab' ? 'Grab Express' : ($order->delivery_provider === 'maxim' ? 'Maxim' : 'Courier');
+
+        if ($validated['status'] === 'in_transit') {
+            $order->update([
+                'delivery_status' => 'in_transit',
+                'status'          => \App\Models\Order::STATUS_PICKED_UP,
+                'picked_up_at'    => now(),
+            ]);
+
+            $order->user->notify(new \App\Notifications\OrderStatusChanged(
+                $order,
+                "Your package was picked up by the {$providerLabel} rider and is on the way!",
+                'fas fa-motorcycle text-indigo-500'
+            ));
+
+            return back()->with('success', "Order #{$order->id} status updated: In Transit with {$providerLabel}.");
+        }
+
+        if ($validated['status'] === 'delivered') {
+            $order->update([
+                'delivery_status' => 'delivered',
+                'status'          => \App\Models\Order::STATUS_DELIVERED,
+                'delivered_at'    => now(),
+            ]);
+
+            $order->user->notify(new \App\Notifications\OrderStatusChanged(
+                $order,
+                "Your package has been delivered by {$providerLabel}! Please confirm receipt and share your review.",
+                'fas fa-check-circle text-emerald-500'
+            ));
+
+            $order->user?->notify(new \App\Notifications\ReviewPrompt($order));
+
+            return back()->with('success', "Order #{$order->id} marked as delivered by {$providerLabel}.");
+        }
+
+        return back();
     }
 }

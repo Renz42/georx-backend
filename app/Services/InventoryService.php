@@ -42,6 +42,7 @@ class InventoryService
                     'batch_id' => $batch->id,
                     'batch_number' => $batch->batch_number,
                     'quantity' => $deductAmount,
+                    'expiration_date' => $batch->expiration_date ? (is_string($batch->expiration_date) ? $batch->expiration_date : $batch->expiration_date->format('Y-m-d')) : null,
                 ];
 
                 $remainingToDeduct -= $deductAmount;
@@ -174,7 +175,7 @@ class InventoryService
             'medicine_id' => $medicineId,
             'batch_number' => $batchData['batch_number'] ?? ('BATCH-' . strtoupper(\Illuminate\Support\Str::random(6))),
             'expiration_date' => $batchData['expiration_date'] ?? null,
-            'quantity' => $batchData['quantity'] ?? 0,
+            'quantity' => max(0, (int)($batchData['quantity'] ?? 0)),
             'status' => $batchData['status'] ?? 'active',
             'purchase_price' => $batchData['purchase_price'] ?? null,
             'storage_condition' => $batchData['storage_condition'] ?? null,
@@ -196,7 +197,7 @@ class InventoryService
         $batch->update(array_filter([
             'batch_number' => $batchData['batch_number'] ?? $batch->batch_number,
             'expiration_date' => $batchData['expiration_date'] ?? $batch->expiration_date,
-            'quantity' => isset($batchData['quantity']) ? (int)$batchData['quantity'] : $batch->quantity,
+            'quantity' => isset($batchData['quantity']) ? max(0, (int)$batchData['quantity']) : $batch->quantity,
             'status' => $batchData['status'] ?? $batch->status,
             'purchase_price' => $batchData['purchase_price'] ?? $batch->purchase_price,
             'storage_condition' => $batchData['storage_condition'] ?? $batch->storage_condition,

@@ -36,7 +36,10 @@ class MobileOrderController extends Controller
                         'address' => $order->pharmacy->address ?? '',
                     ],
                     'items_count' => $order->items->count(),
-                    'delivery_status' => $order->delivery?->status ?? null,
+                    'delivery_status' => $order->delivery_status ?? ($order->delivery?->status ?? null),
+                    'delivery_provider' => $order->delivery_provider,
+                    'delivery_provider_label' => $order->delivery_provider === 'grab' ? 'Grab Express' : ($order->delivery_provider === 'maxim' ? 'Maxim Delivery' : null),
+                    'delivery_booking_id' => $order->delivery_booking_id,
                 ];
             });
 
@@ -65,6 +68,8 @@ class MobileOrderController extends Controller
                 'status' => $order->status,
                 'status_label' => ucwords(str_replace('_', ' ', $order->status)),
                 'total_amount' => (float)$order->total_amount,
+                'delivery_fee' => (float)$order->delivery_fee,
+                'subtotal' => round((float)$order->total_amount - (float)$order->delivery_fee, 2),
                 'delivery_address' => $order->delivery_address,
                 'created_at' => $order->created_at->format('M d, Y g:i A'),
                 'pharmacy' => $order->pharmacy,
@@ -78,8 +83,24 @@ class MobileOrderController extends Controller
                         'subtotal' => (float)($item->price * $item->quantity),
                     ];
                 }),
-                'delivery' => $order->delivery ? [
+                'delivery' => $order->delivery_provider ? [
+                    'id' => null,
+                    'is_external' => true,
+                    'provider' => $order->delivery_provider,
+                    'provider_label' => $order->delivery_provider === 'grab' ? 'Grab Express' : 'Maxim',
+                    'booking_number' => $order->delivery_booking_id,
+                    'tracking_url' => $order->delivery_tracking_url,
+                    'status' => $order->delivery_status ?? $order->status,
+                    'status_label' => ucwords(str_replace('_', ' ', $order->delivery_status ?? $order->status)),
+                    'driver' => ($order->driver_name || $order->driver_phone) ? [
+                        'name' => $order->driver_name,
+                        'phone' => $order->driver_phone,
+                        'vehicle' => $order->driver_vehicle ?? 'Motorcycle',
+                        'rating' => 5.0,
+                    ] : null,
+                ] : ($order->delivery ? [
                     'id' => $order->delivery->id,
+                    'is_external' => false,
                     'booking_number' => $order->delivery->booking_number,
                     'status' => $order->delivery->status,
                     'status_label' => ucwords(str_replace('_', ' ', $order->delivery->status)),
@@ -89,7 +110,7 @@ class MobileOrderController extends Controller
                         'vehicle' => $order->delivery->driver->driverProfile?->vehicle_description,
                         'rating' => 4.8,
                     ] : null,
-                ] : null,
+                ] : null),
             ],
         ]);
     }
@@ -107,6 +128,70 @@ class MobileOrderController extends Controller
             return response()->json(['error' => 'Unauthorized access.'], 403);
         }
 
+        // 1. External Delivery Provider (Grab Express / Maxim)
+        if ($order->delivery_provider) {
+            $isGrab = $order->delivery_provider === 'grab';
+            $providerLabel = $isGrab ? 'Grab Express' : 'Maxim';
+            $pickupLat = (float)($order->pharmacy->latitude ?? 10.644508);
+            $pickupLng = (float)($order->pharmacy->longitude ?? 122.940537);
+            $deliveryLat = (float)($order->latitude ?? 10.6385);
+            $deliveryLng = (float)($order->longitude ?? 122.9520);
+
+            $dist = \App\Services\DeliveryService::calculateDistance($pickupLat, $pickupLng, $deliveryLat, $deliveryLng);
+            $deliveryMins = $dist !== null ? max(3, (int)round(($dist / 25) * 60 + 5)) : 10;
+
+            return response()->json([
+                'status' => 'success',
+                'is_external_provider' => true,
+                'has_active_delivery' => in_array($order->status, [
+                    Order::STATUS_ACCEPTED,
+                    Order::STATUS_AT_PHARMACY,
+                    Order::STATUS_PICKED_UP,
+                    'out_for_delivery',
+                ]),
+                'order_id' => $order->id,
+                'order_number' => '#' . (10000 + $order->id),
+                'pharmacy_confirmed' => (bool)$order->pharmacy_confirmed,
+                'confirmed_at' => $order->confirmed_at ? $order->confirmed_at->format('M d, Y g:i A') : null,
+                'is_prepared' => (bool)$order->is_prepared,
+                'customer_confirmed_delivery' => (bool)$order->customer_confirmed_delivery,
+                'customer_confirmed_at' => $order->customer_confirmed_at ? $order->customer_confirmed_at->format('M d, Y g:i A') : null,
+                'delivery_provider' => $order->delivery_provider,
+                'delivery_provider_label' => $providerLabel,
+                'delivery_booking_id' => $order->delivery_booking_id,
+                'delivery_tracking_url' => $order->delivery_tracking_url,
+                'delivery_status' => $order->delivery_status ?? $order->status,
+                'status_label' => ucwords(str_replace('_', ' ', $order->delivery_status ?? $order->status)),
+                'eta' => [
+                    'to_patient_mins' => $deliveryMins,
+                    'to_patient_label' => "{$deliveryMins} mins (" . now()->addMinutes($deliveryMins)->format('g:i A') . ")",
+                ],
+                'driver' => ($order->driver_name || $order->driver_phone) ? [
+                    'name' => $order->driver_name ?? "{$providerLabel} Courier Rider",
+                    'phone' => $order->driver_phone,
+                    'vehicle' => $order->driver_vehicle ?? 'Motorcycle',
+                    'rating' => 5.0,
+                    'is_external' => true,
+                ] : null,
+                'locations' => [
+                    'driver' => null, // No raw GPS coordinates for external providers
+                    'pickup' => [
+                        'pharmacy_name' => $order->pharmacy->name ?? 'Pharmacy',
+                        'latitude' => $pickupLat,
+                        'longitude' => $pickupLng,
+                    ],
+                    'delivery' => [
+                        'address' => $order->delivery_address,
+                        'latitude' => $deliveryLat,
+                        'longitude' => $deliveryLng,
+                    ],
+                ],
+                'last_location_at' => null,
+                'is_stale' => false,
+            ]);
+        }
+
+        // 2. Legacy Internal Delivery
         $delivery = $order->delivery;
         if (!$delivery) {
             return response()->json([

@@ -14,6 +14,8 @@ class Review extends Model
         'user_id',
         'pharmacy_id',
         'driver_id',
+        'delivery_provider',
+        'delivery_booking_id',
         'rating',
         'comment',
         // Delivery ratings

@@ -334,13 +334,21 @@ class AdminController extends Controller
     public function updateSettings(Request $request)
     {
         $request->validate([
-            'base_delivery_fee'  => 'required|numeric|min:0',
+            'base_delivery_fee'         => 'required|numeric|min:0|max:1000',
+            'delivery_per_km_fee'       => 'nullable|numeric|min:0|max:100',
+            'delivery_minimum_fee'      => 'nullable|numeric|min:0|max:1000',
+            'delivery_maximum_estimate' => 'nullable|numeric|min:0|max:1000',
         ]);
 
         \App\Models\GlobalSetting::set('enable_new_registrations', $request->has('enable_new_registrations') ? '1' : '0');
+        \App\Models\GlobalSetting::set('delivery_estimate_enabled', $request->has('delivery_estimate_enabled') ? '1' : '0');
         \App\Models\GlobalSetting::set('base_delivery_fee',        $request->base_delivery_fee);
+        \App\Models\GlobalSetting::set('delivery_base_fee',        $request->base_delivery_fee);
+        \App\Models\GlobalSetting::set('delivery_per_km_fee',      $request->delivery_per_km_fee ?? '0.00');
+        \App\Models\GlobalSetting::set('delivery_minimum_fee',     $request->delivery_minimum_fee ?? $request->base_delivery_fee);
+        \App\Models\GlobalSetting::set('delivery_maximum_estimate',$request->delivery_maximum_estimate ?? '150.00');
 
-        return back()->with('success', 'Platform settings updated successfully.');
+        return back()->with('success', 'Platform settings and delivery fee parameters updated successfully.');
     }
 
     // =============================================
