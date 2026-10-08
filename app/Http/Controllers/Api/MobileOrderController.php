@@ -29,7 +29,8 @@ class MobileOrderController extends Controller
                     'status_label' => ucwords(str_replace('_', ' ', $order->status)),
                     'total_amount' => (float)$order->total_amount,
                     'delivery_address' => $order->delivery_address,
-                    'created_at' => $order->created_at->format('M d, Y g:i A'),
+                    'created_at' => $order->created_at ? $order->created_at->format('M d, Y g:i A') : null,
+                    'created_at_iso' => $order->created_at ? $order->created_at->toIso8601String() : null,
                     'pharmacy' => [
                         'id' => $order->pharmacy->id ?? null,
                         'name' => $order->pharmacy->name ?? 'Pharmacy',
@@ -57,8 +58,11 @@ class MobileOrderController extends Controller
         $user = $request->user();
 
         $order = Order::where('user_id', $user->id)
-            ->with(['pharmacy', 'items.medicine', 'delivery.driver.driverProfile'])
+            ->with(['pharmacy', 'items.medicine', 'delivery.driver.driverProfile', 'review'])
             ->findOrFail($id);
+
+        $isDelivered = $order->status === Order::STATUS_DELIVERED;
+        $review = $order->review;
 
         return response()->json([
             'status' => 'success',
@@ -67,11 +71,23 @@ class MobileOrderController extends Controller
                 'order_number' => '#' . (10000 + $order->id),
                 'status' => $order->status,
                 'status_label' => ucwords(str_replace('_', ' ', $order->status)),
+                'delivery_status' => $isDelivered ? 'delivered' : ($order->delivery_status ?? ($order->delivery?->status ?? null)),
+                'delivery_provider' => $order->delivery_provider,
+                'delivery_booking_id' => $order->delivery_booking_id,
+                'delivery_tracking_url' => $order->delivery_tracking_url,
+                'customer_confirmed_delivery' => (bool)$order->customer_confirmed_delivery,
+                'customer_confirmed_at' => $order->customer_confirmed_at ? $order->customer_confirmed_at->format('M d, Y g:i A') : null,
+                'delivered_at' => $order->delivered_at ? $order->delivered_at->format('M d, Y g:i A') : null,
+                'has_review' => (bool)$review,
+                'review_rating' => $review ? (int)$review->rating : null,
                 'total_amount' => (float)$order->total_amount,
                 'delivery_fee' => (float)$order->delivery_fee,
                 'subtotal' => round((float)$order->total_amount - (float)$order->delivery_fee, 2),
                 'delivery_address' => $order->delivery_address,
-                'created_at' => $order->created_at->format('M d, Y g:i A'),
+                'latitude' => (float)($order->latitude ?? 10.6385),
+                'longitude' => (float)($order->longitude ?? 122.9520),
+                'created_at' => $order->created_at ? $order->created_at->format('M d, Y g:i A') : null,
+                'created_at_iso' => $order->created_at ? $order->created_at->toIso8601String() : null,
                 'pharmacy' => $order->pharmacy,
                 'items' => $order->items->map(function ($item) {
                     return [
@@ -160,8 +176,9 @@ class MobileOrderController extends Controller
                 'delivery_provider_label' => $providerLabel,
                 'delivery_booking_id' => $order->delivery_booking_id,
                 'delivery_tracking_url' => $order->delivery_tracking_url,
-                'delivery_status' => $order->delivery_status ?? $order->status,
-                'status_label' => ucwords(str_replace('_', ' ', $order->delivery_status ?? $order->status)),
+                'delivery_status' => $order->status === Order::STATUS_DELIVERED ? 'delivered' : ($order->delivery_status ?? $order->status),
+                'order_status' => $order->status,
+                'status_label' => ucwords(str_replace('_', ' ', $order->status === Order::STATUS_DELIVERED ? 'delivered' : ($order->delivery_status ?? $order->status))),
                 'eta' => [
                     'to_patient_mins' => $deliveryMins,
                     'to_patient_label' => "{$deliveryMins} mins (" . now()->addMinutes($deliveryMins)->format('g:i A') . ")",
@@ -290,10 +307,44 @@ class MobileOrderController extends Controller
         $user = $request->user();
         $order = Order::where('id', $id)->where('user_id', $user->id)->with('delivery')->firstOrFail();
 
+        // Cancelled / rejected orders can never be confirmed as delivered.
+        if (in_array($order->status, [Order::STATUS_CANCELLED, Order::STATUS_REJECTED], true)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'This order was cancelled or rejected and cannot be confirmed as delivered.',
+            ], 422);
+        }
+
         $now = now();
+
+        // Idempotency: a repeated confirm must not re-notify the patient/pharmacy.
+        $alreadyConfirmed = (bool)$order->customer_confirmed_delivery;
+
         $order->status = Order::STATUS_DELIVERED;
         $order->delivered_at = $order->delivered_at ?? $now;
+        $order->customer_confirmed_delivery = true;
+        $order->customer_confirmed_at = $order->customer_confirmed_at ?? $now;
+        if ($order->delivery_provider) {
+            // Keep external courier status in sync so tracking never reports a stale 'in_transit'.
+            $order->delivery_status = 'delivered';
+        }
         $order->save();
+
+        if ($alreadyConfirmed) {
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Delivery was already confirmed. Thank you!',
+                'already_confirmed' => true,
+                'order' => [
+                    'id' => $order->id,
+                    'status' => $order->status,
+                    'status_label' => 'Delivered (Approved)',
+                    'delivery_status' => $order->delivery_provider ? 'delivered' : ($order->delivery?->status ?? 'delivered'),
+                    'customer_confirmed_delivery' => true,
+                    'customer_confirmed_at' => $order->customer_confirmed_at ? $order->customer_confirmed_at->format('M d, Y g:i A') : $now->format('M d, Y g:i A'),
+                ],
+            ]);
+        }
 
         if ($order->delivery) {
             $order->delivery->status = Delivery::STATUS_DELIVERED;
@@ -330,8 +381,9 @@ class MobileOrderController extends Controller
                 'id' => $order->id,
                 'status' => $order->status,
                 'status_label' => 'Delivered (Approved)',
+                'delivery_status' => 'delivered',
                 'customer_confirmed_delivery' => true,
-                'customer_confirmed_at' => $order->delivered_at ? $order->delivered_at->format('M d, Y g:i A') : $now->format('M d, Y g:i A'),
+                'customer_confirmed_at' => $order->customer_confirmed_at ? $order->customer_confirmed_at->format('M d, Y g:i A') : $now->format('M d, Y g:i A'),
             ],
         ]);
     }

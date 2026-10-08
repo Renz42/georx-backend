@@ -30,6 +30,7 @@ class OrderStatusChanged extends Notification
         return [
             'title' => 'Order Update #' . $this->order->id,
             'message' => $this->statusMessage,
+            'order_id' => $this->order->id,
             'url' => route('orders.show', $this->order->id),
             'icon' => $this->icon
         ];
