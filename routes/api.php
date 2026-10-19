@@ -22,48 +22,6 @@ Route::middleware('throttle:10,1')->group(function () {
     Route::post('/auth/otp/resend', [AuthController::class, 'resendOtp']);
 });
 
-// Diagnostic route to test and inspect Brevo API delivery
-Route::get('/debug/mail-diagnostic', function (Request $request) {
-    if ($request->query('secret') !== 'georx_debug_2026') {
-        return response()->json(['error' => 'Unauthorized'], 403);
-    }
-
-    $mailer = config('mail.default');
-    $fromAddress = config('mail.from.address');
-    $fromName = config('mail.from.name');
-    $apiKey = env('BREVO_API_KEY', '');
-    $apiKeyMasked = strlen($apiKey) > 8 ? substr($apiKey, 0, 8) . '...' . substr($apiKey, -4) : ($apiKey ? 'SET' : 'EMPTY');
-
-    $payload = [
-        'sender' => [
-            'email' => $fromAddress,
-            'name'  => $fromName,
-        ],
-        'to' => [
-            [
-                'email' => $request->query('to', 'ianmendozasantos51@gmail.com'),
-                'name'  => 'Test Recipient',
-            ]
-        ],
-        'subject' => 'GEORX System Diagnostic Test',
-        'htmlContent' => '<h3>GEORX Mail Test</h3><p>This is a verification test of your Brevo delivery pipeline.</p>',
-    ];
-
-    $response = \Illuminate\Support\Facades\Http::withHeaders([
-        'api-key'      => $apiKey,
-        'Content-Type' => 'application/json',
-        'Accept'       => 'application/json',
-    ])->timeout(15)->post('https://api.brevo.com/v3/smtp/email', $payload);
-
-    return response()->json([
-        'mailer'            => $mailer,
-        'from_address'      => $fromAddress,
-        'from_name'         => $fromName,
-        'api_key_status'    => $apiKeyMasked,
-        'brevo_http_status' => $response->status(),
-        'brevo_response'    => $response->json() ?: $response->body(),
-    ]);
-});
 
 // Public Pharmacy Routes (Consolidated into one group)
 Route::prefix('pharmacies')->group(function () {
