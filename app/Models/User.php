@@ -19,12 +19,13 @@ class User extends Authenticatable
     public const ROLE_DRIVER            = 'driver';           // canonical driver role
     public const ROLE_ADMINISTRATOR     = 'administrator';
 
-    // account_status values (used by drivers + future approval workflows)
-    public const STATUS_ACTIVE         = 'active';
-    public const STATUS_PENDING_REVIEW = 'pending_review';
-    public const STATUS_APPROVED       = 'approved';
-    public const STATUS_SUSPENDED      = 'suspended';
-    public const STATUS_REJECTED       = 'rejected';
+    // account_status values (used by drivers + patient email verification workflows)
+    public const STATUS_ACTIVE               = 'active';
+    public const STATUS_PENDING_VERIFICATION = 'pending_verification';
+    public const STATUS_PENDING_REVIEW       = 'pending_review';
+    public const STATUS_APPROVED             = 'approved';
+    public const STATUS_SUSPENDED            = 'suspended';
+    public const STATUS_REJECTED             = 'rejected';
 
     protected $fillable = [
         'name',
@@ -33,6 +34,7 @@ class User extends Authenticatable
         'password',
         'role',
         'account_status',
+        'email_verified_at',
         'pharmacy_id',
     ];
 

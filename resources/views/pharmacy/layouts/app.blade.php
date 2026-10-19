@@ -24,52 +24,65 @@
                 extend: {
                     fontFamily: { sans: ['Outfit', 'sans-serif'] },
                     colors: {
-                        geo: { 900: '#0F172A', 800: '#1E293B', 700: '#1F2E2C', 600: '#2F7E6A', 500: '#63C6A7', 400: '#BFE8D6', 300: '#A0D8C4', 100: '#E9F7F2', 50: '#F8FAFC' }
+                        geo: { 900: '#0F172A', 800: '#1E293B', 700: '#1F2E2C', 600: '#2F7E6A', 500: '#63C6A7', 400: '#BFE8D6', 300: '#A0D8C4', 100: '#E9F7F2', 50: '#F8FAFC' },
+                        clinical: {
+                            navy: '#0F172A',
+                            surface: '#1E293B',
+                            mint: '#E6F4EA',
+                            pine: '#0D7A5F',
+                            pineHover: '#0B6E53',
+                            border: '#E2E8F0',
+                            canvas: '#F8FAFC',
+                            success: '#059669'
+                        }
                     }
                 }
             }
         }
     </script>
 </head>
-<body class="bg-slate-50 h-screen flex flex-col overflow-hidden text-slate-800">
+<body class="bg-[#F8FAFC] h-screen flex flex-col overflow-hidden text-slate-800">
 
-    <!-- TOP NAVBAR -->
-    <nav class="text-white h-[72px] flex items-center px-6 shadow-sm shrink-0 z-50 transition-colors duration-300 relative" 
-         style="background-color: {{ Auth::user()->pharmacy->theme_color ?? '#2563eb' }}; border-bottom: 1px solid rgba(0,0,0,0.1);">
+    <!-- TOP NAVBAR (Image 2: Executive Obsidian Navy #0F172A) -->
+    <nav class="bg-[#0F172A] text-white h-[70px] flex items-center px-6 shadow-xs shrink-0 z-50 border-b border-slate-800 relative">
         <div class="w-full flex justify-between items-center max-w-[1800px] mx-auto">
             
             <div class="flex items-center gap-4">
-                <button onclick="toggleAdminSidebar()" class="lg:hidden text-white/90 hover:text-white transition-colors p-1">
-                    <i class="fas fa-bars text-2xl"></i>
+                <button onclick="toggleAdminSidebar()" class="lg:hidden text-slate-300 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-slate-800" aria-label="Toggle navigation menu">
+                    <i class="fas fa-bars text-xl"></i>
                 </button>
 
                 <!-- LOGO CONTAINER -->
-                <div class="w-12 h-12 rounded-xl shadow-inner flex items-center justify-center overflow-hidden shrink-0 border-2 border-white/20 bg-white/10 backdrop-blur-sm hidden sm:flex">
-                    @if(Auth::user()->pharmacy->logo_url)
+                <div class="w-11 h-11 rounded-xl flex items-center justify-center overflow-hidden shrink-0 border border-slate-700 bg-slate-800/80 shadow-xs hidden sm:flex">
+                    @if(Auth::user()->pharmacy && Auth::user()->pharmacy->logo_url)
                         <img src="{{ Auth::user()->pharmacy->logo_url }}" alt="Logo" class="w-full h-full object-cover bg-white">
                     @else
-                        <i class="fas fa-clinic-medical text-white text-xl shadow-sm"></i>
+                        <i class="fas fa-clinic-medical text-sky-400 text-lg"></i>
                     @endif
                 </div>
 
                 <div>
-                    <h1 class="text-xl font-black tracking-tight leading-none drop-shadow-sm truncate max-w-[200px] sm:max-w-md">{{ Auth::user()->pharmacy->name ?? 'Pharmacy Portal' }}</h1>
-                    <p class="text-white/80 text-[10px] font-bold mt-1 uppercase tracking-widest">Partner Dashboard</p>
+                    <h1 class="text-base sm:text-lg font-bold tracking-tight text-white leading-none truncate max-w-[200px] sm:max-w-md">
+                        {{ Auth::user()->pharmacy->name ?? 'Pharmacy Portal' }}
+                    </h1>
+                    <p class="text-slate-400 text-[10px] font-bold mt-1 uppercase tracking-widest">Partner Dashboard</p>
                 </div>
             </div>
             
-            <div class="flex items-center gap-3 sm:gap-4">
-                <!-- User Badge -->
-                <div class="flex items-center gap-2 bg-black/10 backdrop-blur-sm px-4 py-2.5 rounded-xl border border-white/10 shadow-inner hidden md:flex">
-                    <i class="fas fa-user-circle text-white/80 text-lg"></i>
-                    <span class="text-sm font-bold tracking-wide">{{ Auth::user()->name }}</span>
+            <div class="flex items-center gap-3">
+                <!-- User Information Badge (Image 2: Sleek Slate Surface) -->
+                <div class="flex items-center gap-2.5 bg-slate-800/70 border border-slate-700/80 px-3.5 py-2 rounded-xl shadow-xs hidden md:flex">
+                    <i class="fas fa-user-circle text-slate-400 text-base"></i>
+                    <span class="text-xs font-semibold text-slate-200 tracking-wide">{{ Auth::user()->name }}</span>
                 </div>
                 
-                <!-- Logout Button -->
+                <!-- Logout Button (Image 2: Professional Bordered Pill) -->
                 <form id="logoutForm" action="{{ route('logout') }}" method="POST" class="inline">
                     @csrf
-                    <button type="button" id="logoutBtn" onclick="openLogoutModal()" class="bg-black/20 hover:bg-black/40 px-4 sm:px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 border border-white/10 shadow-sm active:scale-95">
-                        <i class="fas fa-sign-out-alt"></i> <span class="hidden sm:inline">Logout</span>
+                    <button type="button" id="logoutBtn" onclick="openLogoutModal()" 
+                            class="border border-slate-700 hover:border-slate-600 bg-slate-800/40 hover:bg-slate-800 text-slate-300 hover:text-white px-3.5 sm:px-4 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 shadow-xs active:scale-95">
+                        <i class="fas fa-sign-out-alt text-slate-400 text-xs"></i> 
+                        <span class="hidden sm:inline">Logout</span>
                     </button>
                 </form>
             </div>
@@ -80,83 +93,151 @@
     <div class="flex flex-1 overflow-hidden relative">
         
         <!-- Mobile Sidebar Backdrop -->
-        <div id="adminSidebarBackdrop" onclick="toggleAdminSidebar()" class="fixed inset-0 bg-slate-900/40 z-30 hidden lg:hidden backdrop-blur-sm transition-opacity opacity-0"></div>
+        <div id="adminSidebarBackdrop" onclick="toggleAdminSidebar()" class="fixed inset-0 bg-slate-900/50 z-30 hidden lg:hidden backdrop-blur-xs transition-opacity opacity-0"></div>
 
-        <!-- SIDEBAR -->
-        <aside id="adminSidebar" class="absolute lg:relative top-0 left-0 h-full z-40 w-72 bg-white border-r border-slate-200 overflow-y-auto flex flex-col shrink-0 py-6 custom-scrollbar shadow-[4px_0_24px_rgba(0,0,0,0.05)] transform -translate-x-full lg:translate-x-0 transition-transform duration-300 ease-in-out">
+        <!-- SIDEBAR (Image 2: Crisp Canvas with Soft-Mint & Deep-Pine Active Pill + 3px Left Indicator) -->
+        <aside id="adminSidebar" class="absolute lg:relative top-0 left-0 h-full z-40 w-72 bg-white border-r border-slate-200/90 overflow-y-auto flex flex-col shrink-0 py-6 custom-scrollbar shadow-[2px_0_16px_rgba(15,23,42,0.03)] transform -translate-x-full lg:translate-x-0 transition-transform duration-300 ease-in-out">
             <div class="px-5 mb-2">
-                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-2">Main Menu</p>
+                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 px-3">Main Menu</p>
                 
+                @php
+                    $isDashboard = request()->is('portal/dashboard') || request()->is('pharmacy/dashboard') || request()->routeIs('*.dashboard');
+                    $isInventory = request()->is('portal/inventory*') || request()->is('pharmacy/inventory*') || request()->routeIs('*.inventory*');
+                    $isOrders = request()->routeIs('*.orders*') || request()->is('portal/orders*') || request()->is('pharmacy/orders*');
+                    $isMessages = request()->routeIs('*.messages*') || request()->is('portal/messages*') || request()->is('pharmacy/messages*');
+                    $isAudit = request()->routeIs('*.audit_logs*') || request()->is('portal/audit_logs*') || request()->is('pharmacy/audit_logs*');
+                    $isReviews = request()->routeIs('*.reviews*') || request()->is('portal/reviews*') || request()->is('pharmacy/reviews*');
+                    $isCatalog = request()->routeIs('*.catalog*') || request()->is('portal/catalog*') || request()->is('pharmacy/catalog*');
+                    $isProfile = request()->is('portal/profile*') || request()->is('pharmacy/profile*') || request()->routeIs('*.profile*');
+                    $isSettings = request()->routeIs('*.settings*') || request()->is('portal/settings*') || request()->is('pharmacy/settings*');
+                @endphp
+
                 <!-- Dashboard Link -->
-                <a href="{{ route('portal.dashboard') }}" class="flex items-center gap-4 px-4 py-3.5 rounded-xl mb-1 transition-all {{ request()->is('portal/dashboard') || request()->is('pharmacy/dashboard') ? 'bg-blue-50 text-blue-700 font-bold shadow-sm border-blue-200 border' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800 font-semibold' }}">
-                    <i class="fas fa-tachometer-alt w-5 text-center text-lg {{ request()->is('portal/dashboard') || request()->is('pharmacy/dashboard') ? 'text-blue-600' : 'text-slate-400' }}"></i> 
-                    Dashboard
-                </a>
+                <div class="relative mb-1">
+                    @if($isDashboard)
+                        <span class="absolute -left-5 top-2 bottom-2 w-1 rounded-r-full bg-[#0D7A5F]" aria-hidden="true"></span>
+                    @endif
+                    <a href="{{ route('portal.dashboard') }}" 
+                       class="flex items-center gap-3.5 px-3.5 py-3 rounded-xl text-xs sm:text-sm font-semibold transition-all {{ $isDashboard ? 'bg-[#E6F4EA] text-[#0D7A5F] font-bold shadow-2xs' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 group' }}">
+                        <i class="fas fa-tachometer-alt w-5 text-center text-base {{ $isDashboard ? 'text-[#0D7A5F]' : 'text-slate-400 group-hover:text-slate-600' }}"></i> 
+                        <span>Dashboard</span>
+                    </a>
+                </div>
 
                 <!-- Inventory Link -->
-                <a href="{{ route('portal.inventory') }}" class="flex items-center gap-4 px-4 py-3.5 rounded-xl mb-1 transition-all {{ request()->is('portal/inventory') || request()->is('pharmacy/inventory') ? 'bg-blue-50 text-blue-700 font-bold shadow-sm border-blue-200 border' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800 font-semibold' }}">
-                    <i class="fas fa-pills w-5 text-center text-lg {{ request()->is('portal/inventory') || request()->is('pharmacy/inventory') ? 'text-blue-600' : 'text-slate-400' }}"></i> 
-                    My Inventory
-                </a>
+                <div class="relative mb-1">
+                    @if($isInventory)
+                        <span class="absolute -left-5 top-2 bottom-2 w-1 rounded-r-full bg-[#0D7A5F]" aria-hidden="true"></span>
+                    @endif
+                    <a href="{{ route('portal.inventory') }}" 
+                       class="flex items-center gap-3.5 px-3.5 py-3 rounded-xl text-xs sm:text-sm font-semibold transition-all {{ $isInventory ? 'bg-[#E6F4EA] text-[#0D7A5F] font-bold shadow-2xs' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 group' }}">
+                        <i class="fas fa-pills w-5 text-center text-base {{ $isInventory ? 'text-[#0D7A5F]' : 'text-slate-400 group-hover:text-slate-600' }}"></i> 
+                        <span>My Inventory</span>
+                    </a>
+                </div>
 
-                <!-- Orders Link -->
-                <a href="{{ route('portal.orders') }}" class="flex items-center gap-4 px-4 py-3.5 rounded-xl mb-1 transition-all {{ request()->routeIs('*.orders') ? 'bg-blue-50 text-blue-700 font-bold shadow-sm border-blue-200 border' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800 font-semibold group' }}">
-                    <i class="fas fa-clipboard-list w-5 text-center text-lg {{ request()->routeIs('*.orders') ? 'text-blue-600' : 'text-slate-400 group-hover:text-blue-500' }} transition-colors"></i> 
-                    Incoming Orders
-                </a>
+                <!-- Incoming Orders Link -->
+                <div class="relative mb-1">
+                    @if($isOrders)
+                        <span class="absolute -left-5 top-2 bottom-2 w-1 rounded-r-full bg-[#0D7A5F]" aria-hidden="true"></span>
+                    @endif
+                    <a href="{{ route('portal.orders') }}" 
+                       class="flex items-center gap-3.5 px-3.5 py-3 rounded-xl text-xs sm:text-sm font-semibold transition-all {{ $isOrders ? 'bg-[#E6F4EA] text-[#0D7A5F] font-bold shadow-2xs' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 group' }}">
+                        <i class="fas fa-clipboard-list w-5 text-center text-base {{ $isOrders ? 'text-[#0D7A5F]' : 'text-slate-400 group-hover:text-slate-600' }}"></i> 
+                        <span>Incoming Orders</span>
+                    </a>
+                </div>
 
                 <!-- Messages Link -->
-                <a href="{{ route('portal.messages.index') }}" class="flex items-center gap-4 px-4 py-3.5 rounded-xl mb-1 transition-all {{ request()->routeIs('*.messages.*') ? 'bg-blue-50 text-blue-700 font-bold shadow-sm border-blue-200 border' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800 font-semibold group' }}">
-                    <i class="fas fa-envelope w-5 text-center text-lg {{ request()->routeIs('*.messages.*') ? 'text-blue-600' : 'text-slate-400 group-hover:text-blue-500' }} transition-colors"></i> 
-                    Messages
-                </a>
+                <div class="relative mb-1">
+                    @if($isMessages)
+                        <span class="absolute -left-5 top-2 bottom-2 w-1 rounded-r-full bg-[#0D7A5F]" aria-hidden="true"></span>
+                    @endif
+                    <a href="{{ route('portal.messages.index') }}" 
+                       class="flex items-center gap-3.5 px-3.5 py-3 rounded-xl text-xs sm:text-sm font-semibold transition-all {{ $isMessages ? 'bg-[#E6F4EA] text-[#0D7A5F] font-bold shadow-2xs' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 group' }}">
+                        <i class="fas fa-envelope w-5 text-center text-base {{ $isMessages ? 'text-[#0D7A5F]' : 'text-slate-400 group-hover:text-slate-600' }}"></i> 
+                        <span>Messages</span>
+                    </a>
+                </div>
 
                 <!-- Audit Logs Link -->
                 @if(Auth::user()->isPharmacyOwner() || Auth::user()->isPharmacist())
-                <a href="{{ route('portal.audit_logs') }}" class="flex items-center gap-4 px-4 py-3.5 rounded-xl mb-1 transition-all {{ request()->routeIs('*.audit_logs') ? 'bg-blue-50 text-blue-700 font-bold shadow-sm border-blue-200 border' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800 font-semibold group' }}">
-                    <i class="fas fa-history w-5 text-center text-lg {{ request()->routeIs('*.audit_logs') ? 'text-blue-600' : 'text-slate-400 group-hover:text-blue-500' }} transition-colors"></i> 
-                    Audit Logs
-                </a>
+                <div class="relative mb-1">
+                    @if($isAudit)
+                        <span class="absolute -left-5 top-2 bottom-2 w-1 rounded-r-full bg-[#0D7A5F]" aria-hidden="true"></span>
+                    @endif
+                    <a href="{{ route('portal.audit_logs') }}" 
+                       class="flex items-center gap-3.5 px-3.5 py-3 rounded-xl text-xs sm:text-sm font-semibold transition-all {{ $isAudit ? 'bg-[#E6F4EA] text-[#0D7A5F] font-bold shadow-2xs' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 group' }}">
+                        <i class="fas fa-history w-5 text-center text-base {{ $isAudit ? 'text-[#0D7A5F]' : 'text-slate-400 group-hover:text-slate-600' }}"></i> 
+                        <span>Audit Logs</span>
+                    </a>
+                </div>
                 @endif
 
                 <!-- Reviews Link -->
                 @if(Auth::user()->isPharmacyOwner() || Auth::user()->isPharmacist())
-                <a href="{{ route('portal.reviews') }}" class="flex items-center gap-4 px-4 py-3.5 rounded-xl mb-1 transition-all {{ request()->routeIs('*.reviews') ? 'bg-blue-50 text-blue-700 font-bold shadow-sm border-blue-200 border' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800 font-semibold group' }}">
-                    <i class="fas fa-star w-5 text-center text-lg {{ request()->routeIs('*.reviews') ? 'text-blue-600' : 'text-slate-400 group-hover:text-blue-500' }} transition-colors"></i> 
-                    Customer Reviews
-                </a>
+                <div class="relative mb-1">
+                    @if($isReviews)
+                        <span class="absolute -left-5 top-2 bottom-2 w-1 rounded-r-full bg-[#0D7A5F]" aria-hidden="true"></span>
+                    @endif
+                    <a href="{{ route('portal.reviews') }}" 
+                       class="flex items-center gap-3.5 px-3.5 py-3 rounded-xl text-xs sm:text-sm font-semibold transition-all {{ $isReviews ? 'bg-[#E6F4EA] text-[#0D7A5F] font-bold shadow-2xs' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 group' }}">
+                        <i class="fas fa-star w-5 text-center text-base {{ $isReviews ? 'text-[#0D7A5F]' : 'text-slate-400 group-hover:text-slate-600' }}"></i> 
+                        <span>Customer Reviews</span>
+                    </a>
+                </div>
                 @endif
 
                 <!-- Catalog Link -->
-                <a href="{{ route('portal.catalog') }}" class="flex items-center gap-4 px-4 py-3.5 rounded-xl mb-1 transition-all {{ request()->routeIs('*.catalog') ? 'bg-blue-50 text-blue-700 font-bold border border-blue-100 shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800 font-semibold group' }}">
-                    <i class="fas fa-book-medical w-5 text-center text-lg {{ request()->routeIs('*.catalog') ? 'text-blue-600' : 'text-slate-400 group-hover:text-blue-500' }} transition-colors"></i> 
-                    Medicine Catalog
-                </a>
+                <div class="relative mb-1">
+                    @if($isCatalog)
+                        <span class="absolute -left-5 top-2 bottom-2 w-1 rounded-r-full bg-[#0D7A5F]" aria-hidden="true"></span>
+                    @endif
+                    <a href="{{ route('portal.catalog') }}" 
+                       class="flex items-center gap-3.5 px-3.5 py-3 rounded-xl text-xs sm:text-sm font-semibold transition-all {{ $isCatalog ? 'bg-[#E6F4EA] text-[#0D7A5F] font-bold shadow-2xs' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 group' }}">
+                        <i class="fas fa-book-medical w-5 text-center text-base {{ $isCatalog ? 'text-[#0D7A5F]' : 'text-slate-400 group-hover:text-slate-600' }}"></i> 
+                        <span>Medicine Catalog</span>
+                    </a>
+                </div>
+
                 @if(Auth::user()->isPharmacyOwner())
-                <a href="{{ route('portal.profile') }}" class="flex items-center gap-4 px-4 py-3.5 rounded-xl mb-1 transition-all {{ request()->is('portal/profile') || request()->is('pharmacy/profile') ? 'bg-blue-50 text-blue-700 font-bold shadow-sm border-blue-200 border' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800 font-semibold' }}">
-                    <i class="fas fa-store w-5 text-center text-lg {{ request()->is('portal/profile') || request()->is('pharmacy/profile') ? 'text-blue-600' : 'text-slate-400' }}"></i> 
-                    Pharmacy Profile
-                </a>
+                <!-- Pharmacy Profile Link -->
+                <div class="relative mb-1">
+                    @if($isProfile)
+                        <span class="absolute -left-5 top-2 bottom-2 w-1 rounded-r-full bg-[#0D7A5F]" aria-hidden="true"></span>
+                    @endif
+                    <a href="{{ route('portal.profile') }}" 
+                       class="flex items-center gap-3.5 px-3.5 py-3 rounded-xl text-xs sm:text-sm font-semibold transition-all {{ $isProfile ? 'bg-[#E6F4EA] text-[#0D7A5F] font-bold shadow-2xs' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 group' }}">
+                        <i class="fas fa-store w-5 text-center text-base {{ $isProfile ? 'text-[#0D7A5F]' : 'text-slate-400 group-hover:text-slate-600' }}"></i> 
+                        <span>Pharmacy Profile</span>
+                    </a>
+                </div>
 
                 <!-- Settings Link -->
-                <a href="{{ route('portal.settings') }}" class="flex items-center gap-4 px-4 py-3.5 rounded-xl mb-1 transition-all {{ request()->routeIs('*.settings') ? 'bg-blue-50 text-blue-700 font-bold shadow-sm border-blue-200 border' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800 font-semibold group' }}">
-                    <i class="fas fa-cog w-5 text-center text-lg {{ request()->routeIs('*.settings') ? 'text-blue-600' : 'text-slate-400 group-hover:text-blue-500' }} transition-colors"></i> 
-                    Settings
-                </a>
+                <div class="relative mb-1">
+                    @if($isSettings)
+                        <span class="absolute -left-5 top-2 bottom-2 w-1 rounded-r-full bg-[#0D7A5F]" aria-hidden="true"></span>
+                    @endif
+                    <a href="{{ route('portal.settings') }}" 
+                       class="flex items-center gap-3.5 px-3.5 py-3 rounded-xl text-xs sm:text-sm font-semibold transition-all {{ $isSettings ? 'bg-[#E6F4EA] text-[#0D7A5F] font-bold shadow-2xs' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 group' }}">
+                        <i class="fas fa-cog w-5 text-center text-base {{ $isSettings ? 'text-[#0D7A5F]' : 'text-slate-400 group-hover:text-slate-600' }}"></i> 
+                        <span>Settings</span>
+                    </a>
+                </div>
                 @endif
             </div>
 
             <div class="mt-auto px-5 pt-6 border-t border-slate-100">
-                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-2">Support</p>
-                <a href="{{ url('/') }}" target="_blank" class="flex items-center gap-4 px-4 py-3.5 rounded-xl text-slate-500 hover:bg-slate-50 hover:text-slate-800 font-bold transition-all group">
-                    <i class="fas fa-external-link-alt w-5 text-center text-lg text-slate-400 group-hover:text-blue-500"></i> 
-                    View Public Map
+                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 px-3">Support</p>
+                <a href="{{ url('/') }}" target="_blank" class="flex items-center gap-3.5 px-3.5 py-3 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 text-xs sm:text-sm font-semibold transition-all group">
+                    <i class="fas fa-external-link-alt w-5 text-center text-base text-slate-400 group-hover:text-slate-600"></i> 
+                    <span>View Public Map</span>
                 </a>
             </div>
         </aside>
 
         <!-- MAIN CONTENT AREA -->
-        <main class="flex-1 overflow-y-auto p-6 md:p-8 lg:p-12 relative bg-slate-50/50 custom-scrollbar w-full">
+        <main class="flex-1 overflow-y-auto p-6 md:p-8 lg:p-10 relative bg-[#F8FAFC] custom-scrollbar w-full">
             <div class="w-full max-w-[1600px] mx-auto">
                 @yield('content')
             </div>

@@ -14,9 +14,13 @@ use App\Http\Controllers\Api\MobileDriverController;
 |--------------------------------------------------------------------------
 */
 
-// Public Mobile Auth Routes
-Route::post('/register', [AuthController::class, 'register']);
-Route::post('/login', [AuthController::class, 'login']);
+// Public Mobile Auth & Verification Routes (Throttled for brute-force & abuse protection)
+Route::middleware('throttle:10,1')->group(function () {
+    Route::post('/register', [AuthController::class, 'register']);
+    Route::post('/login', [AuthController::class, 'login']);
+    Route::post('/auth/otp/verify', [AuthController::class, 'verifyOtp']);
+    Route::post('/auth/otp/resend', [AuthController::class, 'resendOtp']);
+});
 
 // Public Pharmacy Routes (Consolidated into one group)
 Route::prefix('pharmacies')->group(function () {
@@ -37,8 +41,8 @@ Route::post('/geofence/validate', function (Request $request) {
 
     return response()->json([
         'is_valid' => $isValid,
-        'message' => $isValid 
-            ? 'Location is within Barangay Alijis service area.' 
+        'message' => $isValid
+            ? 'Location is within Barangay Alijis service area.'
             : 'Location is outside the Barangay Alijis boundary radius.',
     ]);
 });
@@ -95,4 +99,4 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/deliveries', [MobileDriverController::class, 'history']);
         Route::get('/reviews', [MobileDriverController::class, 'reviews']);
     });
-});
+});

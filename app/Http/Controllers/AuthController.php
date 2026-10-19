@@ -43,6 +43,14 @@ class AuthController extends Controller
                 return back()->with('error', 'This login page is for customers only.');
             }
 
+            // Check if patient email is pending verification
+            if ($user->account_status === User::STATUS_PENDING_VERIFICATION) {
+                Auth::guard('web')->logout();
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+                return back()->with('error', 'Your patient account is pending email verification. Please verify using the code sent to your email.');
+            }
+
             $request->session()->regenerate();
             return redirect()->intended('/dashboard');
         }
@@ -192,22 +200,18 @@ class AuthController extends Controller
         ]);
 
         $user = User::create([
-            'name' => $validated['name'],
-            'email' => $validated['email'],
-            'phone' => $validated['phone'] ?? null,
-            'password' => Hash::make($validated['password']),
-            'role' => User::ROLE_CUSTOMER,
+            'name'           => $validated['name'],
+            'email'          => $validated['email'],
+            'phone'          => $validated['phone'] ?? null,
+            'password'       => Hash::make($validated['password']),
+            'role'           => User::ROLE_CUSTOMER,
+            'account_status' => User::STATUS_PENDING_VERIFICATION,
         ]);
 
-        // Sync user to Supabase Auth so cross-login on Mobile works seamlessly
-        \App\Services\SupabaseAuthService::createOrSyncUser(
-            $validated['email'],
-            $validated['password'],
-            $validated['name'],
-            $validated['phone'] ?? ''
-        );
+        // Issue 6-digit OTP verification code
+        \App\Services\EmailOtpService::createChallenge($user, 'registration');
 
-        return redirect()->route('login')->with('success', 'Account created successfully! Please sign in to continue.');
+        return redirect()->route('login')->with('success', 'Account created! Please check your email for the verification code to activate your account.');
     }
 
     // =============================================

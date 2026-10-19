@@ -34,5 +34,11 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('access-customer-features', function ($user) {
             return $user->role === 'customer';
         });
+
+        // Brevo HTTP API Mail Transport
+        \Illuminate\Support\Facades\Mail::extend('brevo', function (array $config = []) {
+            $key = $config['key'] ?? config('services.brevo.key') ?? env('BREVO_API_KEY', '');
+            return new \App\Mail\Transport\BrevoApiTransport($key);
+        });
     }
 }

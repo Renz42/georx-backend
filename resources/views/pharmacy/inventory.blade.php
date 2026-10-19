@@ -47,59 +47,59 @@
 
     <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div>
-            <h2 class="text-3xl font-black text-slate-800 tracking-tight">My Inventory</h2>
-            <p class="text-slate-500 mt-1">Manage your medicine stock, prices, and batches.</p>
+            <p class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1">Stock Management</p>
+            <h2 class="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">My Inventory</h2>
+            <p class="text-slate-500 mt-1 text-sm font-normal">Manage your medicine stock, batches, and unit prices.</p>
         </div>
         @if(!Auth::user()->isPharmacyStaff())
         <button onclick="openAddModal()"
-           class="text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition hover:brightness-110 shadow-lg hover:-translate-y-0.5"
-           style="background-color: {{ $pharmacy->theme_color ?? '#2563eb' }}; shadow-color: {{ $pharmacy->theme_color ?? '#2563eb' }}66;">
-            <i class="fas fa-plus"></i>Add Stock
+           class="bg-[#0D7A5F] hover:bg-[#0B6E53] text-white px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all shadow-xs hover:shadow active:scale-95">
+            <i class="fas fa-plus text-xs"></i> <span>Add Stock</span>
         </button>
         @endif
     </div>
 
     <!-- ✨ KPI SUMMARY CARDS ✨ -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div class="bg-white rounded-[2rem] p-6 border border-slate-200 shadow-sm flex items-center gap-5 hover:shadow-md transition-shadow">
-            <div class="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0" style="background-color: {{ $pharmacy->theme_color ?? '#2563eb' }}15; color: {{ $pharmacy->theme_color ?? '#2563eb' }};">
-                <i class="fas fa-boxes text-2xl"></i>
+        <div class="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs flex items-center gap-5 hover:shadow-sm transition-shadow">
+            <div class="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 bg-[#E6F4EA] text-[#0D7A5F] border border-emerald-100">
+                <i class="fas fa-boxes text-xl"></i>
             </div>
             <div>
-                <p class="text-slate-500 text-sm font-bold uppercase tracking-widest mb-1">Total Stock</p>
-                <h3 class="text-3xl font-black text-slate-800 tracking-tight">{{ $expiryCounts['all'] }} <span class="text-lg text-slate-400 font-medium tracking-normal">items</span></h3>
+                <p class="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1">Total Stock</p>
+                <h3 class="text-3xl font-extrabold text-slate-900 tracking-tight">{{ $expiryCounts['all'] }} <span class="text-sm text-slate-400 font-medium tracking-normal">items</span></h3>
             </div>
         </div>
-        <div class="bg-white rounded-[2rem] p-6 border border-slate-200 shadow-sm flex items-center gap-5 hover:shadow-md transition-shadow">
-            <div class="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                <i class="fas fa-check-circle text-2xl"></i>
+        <div class="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs flex items-center gap-5 hover:shadow-sm transition-shadow">
+            <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
+                <i class="fas fa-check-circle text-xl"></i>
             </div>
             <div>
-                <p class="text-slate-500 text-sm font-bold uppercase tracking-widest mb-1">Valid</p>
-                <h3 class="text-3xl font-black text-slate-800 tracking-tight">{{ $expiryCounts['valid'] }} <span class="text-lg text-slate-400 font-medium tracking-normal">items</span></h3>
+                <p class="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1">Valid</p>
+                <h3 class="text-3xl font-extrabold text-slate-900 tracking-tight">{{ $expiryCounts['valid'] }} <span class="text-sm text-slate-400 font-medium tracking-normal">items</span></h3>
             </div>
         </div>
-        <div class="bg-white rounded-[2rem] p-6 border border-slate-200 shadow-sm flex items-center gap-5 hover:shadow-md transition-shadow">
-            <div class="w-14 h-14 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
-                <i class="fas fa-exclamation-triangle text-2xl"></i>
+        <div class="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs flex items-center gap-5 hover:shadow-sm transition-shadow">
+            <div class="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100">
+                <i class="fas fa-exclamation-triangle text-xl"></i>
             </div>
             <div>
-                <p class="text-slate-500 text-sm font-bold uppercase tracking-widest mb-1">Action Needed</p>
-                <h3 class="text-3xl font-black text-slate-800 tracking-tight">{{ $expiryCounts['expiring'] + $expiryCounts['expired'] }} <span class="text-lg text-slate-400 font-medium tracking-normal">items</span></h3>
+                <p class="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1">Action Needed</p>
+                <h3 class="text-3xl font-extrabold text-slate-900 tracking-tight">{{ $expiryCounts['expiring'] + $expiryCounts['expired'] }} <span class="text-sm text-slate-400 font-medium tracking-normal">items</span></h3>
             </div>
         </div>
     </div>
 
-    <div class="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
+    <div class="bg-white rounded-2xl shadow-xs border border-slate-200/80 overflow-hidden">
 
         <!-- ✨ EXPIRY TABS + SEARCH BAR ROW ✨ -->
-        <div class="bg-slate-50/80 border-b border-slate-200 px-6">
+        <div class="bg-slate-50/80 border-b border-slate-200/80 px-6">
             <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                 <!-- Expiry Filter Tabs (Left) -->
                 <nav class="flex gap-2 overflow-x-auto" aria-label="Inventory expiry filter tabs">
                     @php
                         $tabs = [
-                            'all' => ['label' => 'All Stock', 'icon' => 'fas fa-boxes', 'color' => 'blue', 'count' => $expiryCounts['all']],
+                            'all' => ['label' => 'All Stock', 'icon' => 'fas fa-boxes', 'color' => 'teal', 'count' => $expiryCounts['all']],
                             'valid' => ['label' => 'Valid', 'icon' => 'fas fa-check-circle', 'color' => 'emerald', 'count' => $expiryCounts['valid']],
                             'expiring' => ['label' => 'Expiring Soon', 'icon' => 'fas fa-clock', 'color' => 'amber', 'count' => $expiryCounts['expiring']],
                             'expired' => ['label' => 'Expired', 'icon' => 'fas fa-skull-crossbones', 'color' => 'rose', 'count' => $expiryCounts['expired']],
@@ -109,13 +109,13 @@
                     @endphp
                     @foreach($tabs as $key => $tab)
                         <a href="{{ route('pharmacy.inventory', array_merge(request()->only(['search']), ['filter' => $key])) }}"
-                           class="py-5 px-4 border-b-4 text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap
+                           class="py-4 sm:py-5 px-3.5 border-b-2 text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-2 whitespace-nowrap
                                   {{ $filter === $key 
-                                      ? 'border-' . $tab['color'] . '-600 text-' . $tab['color'] . '-600' 
+                                      ? 'border-' . $tab['color'] . '-600 text-' . $tab['color'] . '-700' 
                                       : 'border-transparent text-slate-400 hover:text-slate-600 hover:border-slate-300' }}">
-                            <i class="{{ $tab['icon'] }} text-[10px]"></i>
-                            {{ $tab['label'] }}
-                            <span class="ml-1 px-2 py-0.5 rounded-full text-[9px] font-black
+                            <i class="{{ $tab['icon'] }} text-[11px]"></i>
+                            <span>{{ $tab['label'] }}</span>
+                            <span class="ml-1 px-2 py-0.5 rounded-full text-[10px] font-bold
                                 {{ $filter === $key
                                     ? 'bg-' . $tab['color'] . '-100 text-' . $tab['color'] . '-700'
                                     : 'bg-slate-100 text-slate-500' }}">
@@ -129,7 +129,7 @@
                 </nav>
 
                 <!-- ✨ SEARCH FORM (Right) ✨ -->
-                <form method="GET" action="{{ route('pharmacy.inventory') }}" class="flex items-center gap-3 py-4 lg:py-0" id="inventory-filter-form">
+                <form method="GET" action="{{ route('pharmacy.inventory') }}" class="flex items-center gap-3 py-3 lg:py-0" id="inventory-filter-form">
                     <input type="hidden" name="filter" value="{{ $filter }}">
 
                     <div class="relative">
@@ -139,12 +139,12 @@
                             name="search" 
                             value="{{ $search }}" 
                             placeholder="Search medicine or batch..." 
-                            class="pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 w-56 transition shadow-sm"
+                            class="pl-9 pr-3.5 py-2 bg-white border border-slate-200/90 rounded-xl text-xs font-semibold text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0D7A5F]/20 focus:border-[#0D7A5F] w-56 transition shadow-2xs"
                             id="inventory-search-input"
                         >
                     </div>
 
-                    <button type="submit" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black uppercase tracking-widest rounded-xl transition shadow-lg shadow-blue-200 hover:-translate-y-0.5">
+                    <button type="submit" class="px-5 py-2.5 bg-[#0D7A5F] hover:bg-[#0B6E53] text-white text-xs font-black uppercase tracking-widest rounded-xl transition shadow-xs hover:shadow hover:-translate-y-0.5">
                         <i class="fas fa-filter mr-1"></i> Filter
                     </button>
 
@@ -380,7 +380,7 @@
                                     <p class="font-black text-lg text-emerald-600 tracking-tight">No expired items</p>
                                     <p class="text-sm text-slate-400 mt-1 font-medium">All your inventory items have valid expiration dates.</p>
                                 @elseif($filter === 'expiring')
-                                    <p class="font-black text-lg text-blue-600 tracking-tight">No items expiring soon</p>
+                                    <p class="font-black text-lg text-amber-600 tracking-tight">No items expiring soon</p>
                                     <p class="text-sm text-slate-400 mt-1 font-medium">None of your medicines are expiring within the next 90 days.</p>
                                 @elseif($filter === 'low_stock')
                                     <p class="font-black text-lg text-emerald-600 tracking-tight">Stock levels are healthy</p>
@@ -422,7 +422,7 @@
                             </span>
                         @else
                             <a href="{{ $inventory->previousPageUrl() }}" 
-                               class="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600 transition shadow-sm">
+                               class="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-[#E6F4EA] hover:border-[#0D7A5F]/40 hover:text-[#0D7A5F] transition shadow-xs">
                                 <i class="fas fa-chevron-left text-xs"></i>
                             </a>
                         @endif
@@ -430,12 +430,12 @@
                         {{-- Page Numbers --}}
                         @foreach($inventory->getUrlRange(1, $inventory->lastPage()) as $page => $url)
                             @if($page == $inventory->currentPage())
-                                <span class="w-10 h-10 flex items-center justify-center rounded-xl bg-blue-600 text-white text-sm font-black shadow-lg shadow-blue-200">
+                                <span class="w-10 h-10 flex items-center justify-center rounded-xl bg-[#0D7A5F] text-white text-sm font-black shadow-xs">
                                     {{ $page }}
                                 </span>
                             @else
                                 <a href="{{ $url }}" 
-                                   class="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600 text-sm font-bold transition shadow-sm">
+                                   class="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-[#E6F4EA] hover:border-[#0D7A5F]/40 hover:text-[#0D7A5F] text-sm font-bold transition shadow-xs">
                                     {{ $page }}
                                 </a>
                             @endif
@@ -444,7 +444,7 @@
                         {{-- Next --}}
                         @if($inventory->hasMorePages())
                             <a href="{{ $inventory->nextPageUrl() }}" 
-                               class="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600 transition shadow-sm">
+                               class="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-[#E6F4EA] hover:border-[#0D7A5F]/40 hover:text-[#0D7A5F] transition shadow-xs">
                                 <i class="fas fa-chevron-right text-xs"></i>
                             </a>
                         @else
@@ -483,8 +483,8 @@
                 <form id="form-existing" method="POST" action="{{ route('pharmacy.inventory.add') }}" class="block">
                     @csrf
                     
-                    <div class="bg-blue-50 border border-blue-100 text-blue-700 text-sm font-medium px-5 py-4 rounded-2xl mb-8 flex items-start gap-3 shadow-sm">
-                        <i class="fas fa-info-circle mt-0.5 text-blue-500 text-lg"></i>
+                    <div class="bg-[#E6F4EA]/70 border border-emerald-200/80 text-[#0D7A5F] text-sm font-medium px-5 py-4 rounded-2xl mb-8 flex items-start gap-3 shadow-2xs">
+                        <i class="fas fa-info-circle mt-0.5 text-[#0D7A5F] text-lg"></i>
                         <p>Select a medicine from the global database, then set <strong>your pharmacy's specific price and stock levels</strong> below.</p>
                     </div>
 
@@ -535,12 +535,12 @@
                                 <p class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 border-b border-slate-100 pb-2">3. Stock & Tracking</p>
                                 
                                 {{-- Box to Piece Auto-Converter (Add Modal) --}}
-                                <div class="bg-blue-50/50 border border-blue-100 rounded-2xl p-4 mb-4">
+                                <div class="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 mb-4">
                                     <div class="flex items-center gap-2 mb-2">
-                                        <input type="checkbox" id="existing_convert" class="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer" onchange="toggleConverter('existing')">
+                                        <input type="checkbox" id="existing_convert" class="w-4 h-4 text-[#0D7A5F] rounded border-slate-300 focus:ring-[#0D7A5F] cursor-pointer" onchange="toggleConverter('existing')">
                                         <label for="existing_convert" class="text-sm font-bold text-slate-700 cursor-pointer select-none">Stock by Box, Sell by Piece (Auto-Convert)</label>
                                     </div>
-                                    <div id="existing_converter_box" class="hidden grid grid-cols-2 gap-4 pt-3 mt-1 border-t border-blue-100/50">
+                                    <div id="existing_converter_box" class="hidden grid grid-cols-2 gap-4 pt-3 mt-1 border-t border-slate-200/80">
                                         <div>
                                             <label class="block text-[10px] font-black text-slate-500 uppercase mb-1">Number of Boxes</label>
                                             <input type="number" id="existing_boxes" placeholder="e.g. 30" class="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 outline-none font-bold text-slate-700 transition-shadow" style="--tw-ring-color: {{ $pharmacy->theme_color ?? '#2563eb' }};" oninput="runConverter('existing')">
@@ -804,12 +804,12 @@
                     <p class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 border-b border-slate-100 pb-2">2. Stock Update</p>
                     
                     {{-- Box to Piece Auto-Converter (Edit Modal) --}}
-                    <div class="bg-blue-50/50 border border-blue-100 rounded-2xl p-4 mb-4">
+                    <div class="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 mb-4">
                         <div class="flex items-center gap-2 mb-2">
-                            <input type="checkbox" id="edit_convert" class="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer" onchange="toggleConverter('edit')">
+                            <input type="checkbox" id="edit_convert" class="w-4 h-4 text-[#0D7A5F] rounded border-slate-300 focus:ring-[#0D7A5F] cursor-pointer" onchange="toggleConverter('edit')">
                             <label for="edit_convert" class="text-sm font-bold text-slate-700 cursor-pointer select-none">Stock by Box, Sell by Piece (Auto-Convert)</label>
                         </div>
-                        <div id="edit_converter_box" class="hidden grid grid-cols-2 gap-4 pt-3 mt-1 border-t border-blue-100/50">
+                        <div id="edit_converter_box" class="hidden grid grid-cols-2 gap-4 pt-3 mt-1 border-t border-slate-200/80">
                             <div>
                                 <label class="block text-[10px] font-black text-slate-500 uppercase mb-1">Number of Boxes</label>
                                 <input type="number" id="edit_boxes" placeholder="e.g. 30" class="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 outline-none font-bold text-slate-700 transition-shadow" style="--tw-ring-color: {{ $pharmacy->theme_color ?? '#2563eb' }};" oninput="runConverter('edit')">

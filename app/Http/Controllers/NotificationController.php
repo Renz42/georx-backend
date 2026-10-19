@@ -218,14 +218,28 @@ class NotificationController extends Controller
         return response()->json([
             'success' => true,
             'alerts' => $alerts->map(function ($a) {
+                // Real-time pharmacy-specific inventory lookup
+                $pivot = \Illuminate\Support\Facades\DB::table('pharmacy_medicine')
+                    ->where('pharmacy_id', $a->pharmacy_id)
+                    ->where('medicine_id', $a->medicine_id)
+                    ->first();
+
+                $qty = $pivot ? (int) $pivot->quantity_on_hand : null;
+                $isAvailable = $pivot ? ((bool) ($pivot->is_available ?? true) && ($qty !== null && $qty > 0)) : false;
+                $price = $pivot && isset($pivot->selling_price) ? (float) $pivot->selling_price : null;
+
                 return [
                     'id' => $a->id,
                     'pharmacy_id' => $a->pharmacy_id,
                     'medicine_id' => $a->medicine_id,
-                    'pharmacy_name' => $a->pharmacy->name,
-                    'medicine_name' => $a->medicine->brand_name ?? $a->medicine->generic_name,
-                    'generic_name' => $a->medicine->generic_name,
-                    'created_at' => $a->created_at->diffForHumans(),
+                    'pharmacy_name' => $a->pharmacy->name ?? 'Partner Pharmacy',
+                    'medicine_name' => $a->medicine->brand_name ?? $a->medicine->generic_name ?? 'Medicine',
+                    'generic_name' => $a->medicine->generic_name ?? null,
+                    'created_at' => $a->created_at ? $a->created_at->diffForHumans() : 'Recently',
+                    'created_at_iso' => $a->created_at ? $a->created_at->toIso8601String() : null,
+                    'quantity_on_hand' => $qty,
+                    'is_in_stock' => $isAvailable,
+                    'selling_price' => $price,
                 ];
             }),
         ]);

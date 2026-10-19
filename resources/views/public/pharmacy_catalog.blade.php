@@ -159,6 +159,19 @@
                                 <i class="fas fa-file-prescription"></i> Requires Rx
                             </div>
                         @endif
+
+                        {{-- TC-04: Explicit In Stock / Out of Stock Status Badges --}}
+                        @if(($medicine->pivot->quantity_on_hand ?? 0) > 0 && ($medicine->pivot->is_available ?? true))
+                            <div class="absolute top-4 right-4 bg-emerald-100 text-emerald-800 border border-emerald-300 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
+                                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                In Stock
+                            </div>
+                        @else
+                            <div class="absolute top-4 right-4 bg-rose-100 text-rose-800 border border-rose-300 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
+                                <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+                                Out of Stock
+                            </div>
+                        @endif
                     </div>
 
                     <div class="p-6 sm:p-8 flex-1 flex flex-col">

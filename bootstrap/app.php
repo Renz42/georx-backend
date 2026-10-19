@@ -20,13 +20,37 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->render(function (\Illuminate\Auth\AuthenticationException $e, $request) {
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json(['message' => 'Unauthenticated.'], 401);
+            }
+        });
+        $exceptions->render(function (\Illuminate\Validation\ValidationException $e, $request) {
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json([
+                    'message' => $e->getMessage(),
+                    'errors' => $e->errors(),
+                ], 422);
+            }
+        });
+        $exceptions->render(function (\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $e, $request) {
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json([
+                    'message' => $e->getMessage() ?: 'An error occurred.',
+                ], $e->getStatusCode());
+            }
+        });
         $exceptions->render(function (\Throwable $e, $request) {
-            return response()->json([
-                'error' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-                'trace' => explode("\n", $e->getTraceAsString())
-            ], 500);
+            if ($request->expectsJson() || $request->is('api/*')) {
+                $payload = [
+                    'error' => config('app.debug') ? $e->getMessage() : 'Server error.',
+                ];
+                if (config('app.debug')) {
+                    $payload['file'] = $e->getFile();
+                    $payload['line'] = $e->getLine();
+                }
+                return response()->json($payload, 500);
+            }
         });
     })->create();
 

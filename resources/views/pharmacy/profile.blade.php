@@ -7,19 +7,20 @@
 
 @section('content')
     <!-- Page Header -->
-    <div class="mb-10">
-        <h2 class="text-3xl font-black text-slate-800 tracking-tight">Pharmacy Information</h2>
-        <p class="text-slate-500 mt-1 font-medium">Verify your registered business credentials</p>
+    <div class="mb-8">
+        <p class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1">Entity Credentials</p>
+        <h2 class="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Pharmacy Information</h2>
+        <p class="text-slate-500 mt-1 text-sm font-normal">Verify registered business credentials, operating hours, and GPS location.</p>
     </div>
 
     <!-- Professional Read-Only Notice -->
-    <div class="bg-blue-50 border border-blue-200 rounded-2xl p-6 mb-8 flex items-start gap-5 shadow-sm">
-        <div class="bg-blue-600 p-3 rounded-xl text-white shadow-md shadow-blue-200">
-            <i class="fas fa-shield-alt text-xl"></i>
+    <div class="bg-[#E6F4EA]/70 border border-emerald-200/80 rounded-2xl p-5 mb-8 flex items-start gap-4 shadow-2xs">
+        <div class="bg-[#0D7A5F] p-2.5 rounded-xl text-white shadow-xs shrink-0">
+            <i class="fas fa-shield-alt text-lg"></i>
         </div>
         <div>
-            <h3 class="text-blue-900 font-black text-sm uppercase tracking-tight">Verified Account Information</h3>
-            <p class="text-blue-700 text-sm mt-1 leading-relaxed font-medium">
+            <h3 class="text-emerald-950 font-bold text-sm tracking-tight uppercase">Verified Account Information</h3>
+            <p class="text-emerald-800 text-xs sm:text-sm mt-1 leading-relaxed font-medium">
                 To maintain the integrity of our medical network, core business details (Name, Address, and GPS Location) are verified and locked. 
                 If you need to update this information, please <span class="font-bold underline cursor-pointer">contact system support</span>.
             </p>
@@ -32,13 +33,13 @@
         <div class="lg:col-span-2 space-y-8">
 
             <!-- Storefront Branding Preview Card -->
-            <div class="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-                <div class="px-8 py-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                    <h3 class="font-black text-slate-800 flex items-center gap-2 text-sm uppercase tracking-tight">
-                        <i class="fas fa-image text-blue-600"></i> Storefront Branding
+            <div class="bg-white rounded-2xl shadow-xs border border-slate-200/80 overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                    <h3 class="font-bold text-slate-900 flex items-center gap-2 text-xs sm:text-sm uppercase tracking-tight">
+                        <i class="fas fa-image text-[#0D7A5F]"></i> Storefront Branding
                     </h3>
-                    <a href="{{ route('portal.settings') }}" class="text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors border border-blue-100">
-                        <i class="fas fa-pen mr-1"></i> Edit in Settings
+                    <a href="{{ route('portal.settings') }}" class="text-xs font-bold text-[#0D7A5F] hover:text-[#0B6E53] bg-[#E6F4EA] hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-colors border border-emerald-200/60 shadow-2xs">
+                        <i class="fas fa-pen mr-1 text-[10px]"></i> Edit in Settings
                     </a>
                 </div>
 
@@ -49,14 +50,14 @@
                         <div class="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent"></div>
                     @else
                         <div class="w-full h-full flex flex-col items-center justify-center text-slate-400">
-                            <i class="fas fa-panorama text-4xl mb-2"></i>
-                            <p class="text-xs font-bold uppercase tracking-widest">No Cover Photo</p>
+                            <i class="fas fa-panorama text-3xl mb-1.5"></i>
+                            <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">No Cover Photo</p>
                         </div>
                     @endif
 
                     <!-- Logo Overlay -->
-                    <div class="absolute -bottom-10 left-8">
-                        <div class="w-20 h-20 rounded-2xl border-4 border-white shadow-lg bg-white flex items-center justify-center overflow-hidden">
+                    <div class="absolute -bottom-10 left-6 sm:left-8">
+                        <div class="w-20 h-20 rounded-2xl border-4 border-white shadow-md bg-white flex items-center justify-center overflow-hidden">
                             @if($pharmacy->logo_url)
                                 <img src="{{ $pharmacy->logo_url }}" alt="Pharmacy Logo" class="w-full h-full object-cover">
                             @else
@@ -66,74 +67,76 @@
                     </div>
                 </div>
 
-                <div class="pt-14 pb-6 px-8">
-                    <h4 class="text-lg font-black text-slate-800">{{ $pharmacy->name }}</h4>
-                    <p class="text-sm text-slate-500 font-medium">{{ $pharmacy->address }}</p>
+                <div class="pt-14 pb-6 px-6 sm:px-8">
+                    <h4 class="text-lg font-bold text-slate-900">{{ $pharmacy->name }}</h4>
+                    <p class="text-xs sm:text-sm text-slate-500 font-medium">{{ $pharmacy->address }}</p>
                 </div>
             </div>
-            <div class="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-                <div class="px-8 py-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                    <h3 class="font-black text-slate-800 flex items-center gap-2 text-sm uppercase tracking-tight">
-                        <i class="fas fa-store text-blue-600"></i> Business Credentials
+
+            <!-- Business Credentials Card -->
+            <div class="bg-white rounded-2xl shadow-xs border border-slate-200/80 overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                    <h3 class="font-bold text-slate-900 flex items-center gap-2 text-xs sm:text-sm uppercase tracking-tight">
+                        <i class="fas fa-store text-[#0D7A5F]"></i> Business Credentials
                     </h3>
                     <div class="flex items-center gap-2">
                         @if($pharmacy->is_approved)
-                            <span class="bg-emerald-100 text-emerald-700 text-[10px] px-3 py-1 rounded-lg font-black uppercase tracking-widest border border-emerald-200">
-                                <i class="fas fa-check-circle mr-1"></i> Verified Partner
+                            <span class="bg-emerald-50 text-emerald-700 text-[10px] px-2.5 py-1 rounded-lg font-bold uppercase tracking-wider border border-emerald-200/80">
+                                <i class="fas fa-check-circle mr-1 text-emerald-600"></i> Verified Partner
                             </span>
                         @endif
                     </div>
                 </div>
 
-                <div class="p-8 grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-10">
+                <div class="p-6 sm:p-8 grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8">
                     <div class="space-y-1">
-                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Pharmacy Name</label>
-                        <p class="text-slate-800 font-bold text-lg leading-tight">{{ $pharmacy->name }}</p>
+                        <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Pharmacy Name</label>
+                        <p class="text-slate-900 font-bold text-base leading-tight">{{ $pharmacy->name }}</p>
                     </div>
 
                     <div class="space-y-1">
-                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Owner / Manager</label>
-                        <p class="text-slate-700 font-bold">{{ $pharmacy->owner_name ?? 'Not Set' }}</p>
+                        <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Owner / Manager</label>
+                        <p class="text-slate-800 font-bold text-sm">{{ $pharmacy->owner_name ?? 'Not Set' }}</p>
                     </div>
 
                     <div class="space-y-1">
-                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Business Permit</label>
-                        <p class="text-slate-700 font-bold">{{ $pharmacy->business_permit ?? 'Not Provided' }}</p>
+                        <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Business Permit</label>
+                        <p class="text-slate-800 font-mono text-sm font-bold">{{ $pharmacy->business_permit ?? 'Not Provided' }}</p>
                     </div>
 
                     <div class="space-y-1 md:col-span-2">
-                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Registered Street Address</label>
-                        <p class="text-slate-700 font-semibold leading-relaxed">{{ $pharmacy->address }}</p>
+                        <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Registered Street Address</label>
+                        <p class="text-slate-700 font-medium text-sm leading-relaxed">{{ $pharmacy->address }}</p>
                     </div>
 
                     <div class="space-y-1">
-                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Contact Number</label>
-                        <div class="flex items-center gap-2 text-slate-700 font-bold">
-                            <i class="fas fa-phone-alt text-slate-300 text-xs"></i>
+                        <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Contact Number</label>
+                        <div class="flex items-center gap-2 text-slate-800 font-bold text-sm">
+                            <i class="fas fa-phone-alt text-slate-400 text-xs"></i>
                             {{ $pharmacy->phone ?? '---' }}
                         </div>
                     </div>
 
                     <div class="space-y-1">
-                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Public Email</label>
-                        <div class="flex items-center gap-2 text-slate-700 font-bold">
-                            <i class="fas fa-envelope text-slate-300 text-xs"></i>
+                        <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Public Email</label>
+                        <div class="flex items-center gap-2 text-slate-800 font-bold text-sm">
+                            <i class="fas fa-envelope text-slate-400 text-xs"></i>
                             {{ $pharmacy->email ?? 'Not set' }}
                         </div>
                     </div>
 
                     <div class="space-y-1">
-                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Operating Hours</label>
+                        <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Operating Hours</label>
                         <p class="text-slate-700 font-bold flex items-center gap-2">
                             @if(is_array($pharmacy->operating_hours) && isset($pharmacy->operating_hours['open']) && isset($pharmacy->operating_hours['close']))
-                                <span class="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg border border-blue-100 font-bold text-sm">
-                                    <i class="far fa-clock mr-1.5 text-blue-400"></i>
+                                <span class="bg-[#E6F4EA] text-[#0D7A5F] px-3 py-1.5 rounded-lg border border-emerald-200/60 font-bold text-xs sm:text-sm">
+                                    <i class="far fa-clock mr-1.5 text-[#0D7A5F]"></i>
                                     {{ \Carbon\Carbon::parse($pharmacy->operating_hours['open'])->format('h:i A') }}
-                                    <span class="text-blue-300 mx-1">—</span>
+                                    <span class="text-emerald-400 mx-1">—</span>
                                     {{ \Carbon\Carbon::parse($pharmacy->operating_hours['close'])->format('h:i A') }}
                                 </span>
                             @else
-                                <span class="text-slate-400 italic bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 text-sm">
+                                <span class="text-slate-400 italic bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 text-xs">
                                     <i class="fas fa-exclamation-circle mr-1"></i> Not configured
                                 </span>
                             @endif
@@ -141,19 +144,19 @@
                     </div>
 
                     <div class="space-y-1">
-                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Current Status</label>
+                        <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Current Status</label>
                         <div class="pt-1">
                             @if($pharmacy->is_currently_open === 'online')
-                                <span class="bg-emerald-50 text-emerald-600 text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-widest border border-emerald-100">
-                                    <i class="fas fa-signal mr-1"></i> Currently Online
+                                <span class="bg-emerald-50 text-emerald-700 text-[10px] px-3 py-1 rounded-full font-bold uppercase tracking-wider border border-emerald-200/80">
+                                    <i class="fas fa-signal mr-1 text-emerald-600"></i> Currently Online
                                 </span>
                             @elseif($pharmacy->is_currently_open === 'closed')
-                                <span class="bg-amber-50 text-amber-600 text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-widest border border-amber-100">
-                                    <i class="fas fa-clock mr-1"></i> Closed (Outside Hours)
+                                <span class="bg-amber-50 text-amber-700 text-[10px] px-3 py-1 rounded-full font-bold uppercase tracking-wider border border-amber-200/80">
+                                    <i class="fas fa-clock mr-1 text-amber-600"></i> Closed (Outside Hours)
                                 </span>
                             @else
-                                <span class="bg-red-50 text-red-600 text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-widest border border-red-100">
-                                    <i class="fas fa-power-off mr-1"></i> Offline
+                                <span class="bg-rose-50 text-rose-700 text-[10px] px-3 py-1 rounded-full font-bold uppercase tracking-wider border border-rose-200/80">
+                                    <i class="fas fa-power-off mr-1 text-rose-600"></i> Offline
                                 </span>
                             @endif
                         </div>
@@ -164,24 +167,24 @@
 
         <!-- Right: Map Location -->
         <div class="space-y-6">
-            <div class="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden sticky top-6">
+            <div class="bg-white rounded-2xl shadow-xs border border-slate-200/80 overflow-hidden sticky top-6">
                 <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
-                    <h3 class="font-black text-slate-800 flex items-center gap-2 text-sm uppercase tracking-tight">
-                        <i class="fas fa-map-marker-alt text-red-500"></i> GPS Location
+                    <h3 class="font-bold text-slate-900 flex items-center gap-2 text-xs sm:text-sm uppercase tracking-tight">
+                        <i class="fas fa-map-marker-alt text-rose-500"></i> GPS Location
                     </h3>
                 </div>
                 
                 <div id="map" class="h-64 z-0"></div>
 
-                <div class="p-6 bg-slate-50 border-t border-slate-100">
-                    <div class="flex flex-col gap-3">
-                        <div class="flex justify-between items-center">
-                            <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Latitude</span>
-                            <span class="font-mono text-xs font-bold text-slate-600">{{ $pharmacy->latitude }}</span>
+                <div class="p-6 bg-slate-50/50 border-t border-slate-100">
+                    <div class="flex flex-col gap-2.5">
+                        <div class="flex justify-between items-center text-xs">
+                            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Latitude</span>
+                            <span class="font-mono font-semibold text-slate-700">{{ $pharmacy->latitude }}</span>
                         </div>
-                        <div class="flex justify-between items-center">
-                            <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Longitude</span>
-                            <span class="font-mono text-xs font-bold text-slate-600">{{ $pharmacy->longitude }}</span>
+                        <div class="flex justify-between items-center text-xs">
+                            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Longitude</span>
+                            <span class="font-mono font-semibold text-slate-700">{{ $pharmacy->longitude }}</span>
                         </div>
                     </div>
                 </div>
@@ -210,7 +213,7 @@
         }).addTo(map);
 
         const customIcon = L.divIcon({
-            html: `<div class="bg-blue-600 w-8 h-8 rounded-full border-4 border-white shadow-lg flex items-center justify-center text-white">
+            html: `<div class="bg-[#0D7A5F] w-8 h-8 rounded-full border-4 border-white shadow-lg flex items-center justify-center text-white">
                     <i class="fas fa-clinic-medical text-xs"></i>
                    </div>`,
             className: '',

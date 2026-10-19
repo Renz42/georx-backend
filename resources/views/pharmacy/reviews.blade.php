@@ -3,24 +3,25 @@
 
 @section('content')
     <!-- Page Header -->
-    <div class="mb-10 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+    <div class="mb-8 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
         <div>
-            <h2 class="text-3xl font-black text-slate-800 tracking-tight">Customer Reviews</h2>
-            <p class="text-slate-500 mt-1 font-medium">Monitor patient feedback and satisfaction ratings for your pharmacy.</p>
+            <p class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1">Feedback & Quality</p>
+            <h2 class="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Customer Reviews</h2>
+            <p class="text-slate-500 mt-1 text-sm font-normal">Monitor patient satisfaction ratings, service quality, and direct feedback.</p>
         </div>
     </div>
 
     <!-- Rating Summary Cards -->
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <!-- Overall Rating -->
-        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 text-center">
-            <div class="text-4xl font-black text-slate-800 mb-1">{{ $ratings['pharmacy_overall'] > 0 ? number_format($ratings['pharmacy_overall'], 1) : '--' }}</div>
+        <div class="bg-white rounded-2xl shadow-xs border border-slate-200/80 p-6 text-center">
+            <div class="text-3xl sm:text-4xl font-extrabold text-slate-900 mb-1">{{ $ratings['pharmacy_overall'] > 0 ? number_format($ratings['pharmacy_overall'], 1) : '--' }}</div>
             <div class="flex justify-center gap-0.5 mb-2">
                 @for ($i = 1; $i <= 5; $i++)
                     @if ($i <= round($ratings['pharmacy_overall']))
-                        <i class="fas fa-star text-amber-400 text-sm"></i>
+                        <i class="fas fa-star text-amber-400 text-xs"></i>
                     @else
-                        <i class="fas fa-star text-slate-200 text-sm"></i>
+                        <i class="fas fa-star text-slate-200 text-xs"></i>
                     @endif
                 @endfor
             </div>
@@ -29,28 +30,28 @@
         </div>
 
         <!-- Customer Service -->
-        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 text-center">
-            <div class="text-3xl font-black text-slate-800 mb-1">{{ $ratings['customer_service'] > 0 ? number_format($ratings['customer_service'], 1) : '--' }}</div>
-            <div class="w-full bg-slate-100 rounded-full h-2 mt-2 mb-2">
-                <div class="h-2 rounded-full transition-all duration-500" style="width: {{ ($ratings['customer_service'] / 5) * 100 }}%; background-color: {{ Auth::user()->pharmacy->theme_color ?? '#2563eb' }};"></div>
+        <div class="bg-white rounded-2xl shadow-xs border border-slate-200/80 p-6 text-center">
+            <div class="text-2xl sm:text-3xl font-extrabold text-slate-900 mb-1">{{ $ratings['customer_service'] > 0 ? number_format($ratings['customer_service'], 1) : '--' }}</div>
+            <div class="w-full bg-slate-100 rounded-full h-1.5 mt-2 mb-2">
+                <div class="h-1.5 rounded-full transition-all duration-500 bg-[#0D7A5F]" style="width: {{ ($ratings['customer_service'] / 5) * 100 }}%;"></div>
             </div>
             <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Service Quality</p>
         </div>
 
         <!-- Medicine Availability -->
-        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 text-center">
-            <div class="text-3xl font-black text-slate-800 mb-1">{{ $ratings['medicine_availability'] > 0 ? number_format($ratings['medicine_availability'], 1) : '--' }}</div>
-            <div class="w-full bg-slate-100 rounded-full h-2 mt-2 mb-2">
-                <div class="h-2 rounded-full transition-all duration-500" style="width: {{ ($ratings['medicine_availability'] / 5) * 100 }}%; background-color: {{ Auth::user()->pharmacy->theme_color ?? '#2563eb' }};"></div>
+        <div class="bg-white rounded-2xl shadow-xs border border-slate-200/80 p-6 text-center">
+            <div class="text-2xl sm:text-3xl font-extrabold text-slate-900 mb-1">{{ $ratings['medicine_availability'] > 0 ? number_format($ratings['medicine_availability'], 1) : '--' }}</div>
+            <div class="w-full bg-slate-100 rounded-full h-1.5 mt-2 mb-2">
+                <div class="h-1.5 rounded-full transition-all duration-500 bg-[#0D7A5F]" style="width: {{ ($ratings['medicine_availability'] / 5) * 100 }}%;"></div>
             </div>
             <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Availability</p>
         </div>
 
         <!-- Price Rating -->
-        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 text-center">
-            <div class="text-3xl font-black text-slate-800 mb-1">{{ $ratings['price_rating'] > 0 ? number_format($ratings['price_rating'], 1) : '--' }}</div>
-            <div class="w-full bg-slate-100 rounded-full h-2 mt-2 mb-2">
-                <div class="h-2 rounded-full transition-all duration-500" style="width: {{ ($ratings['price_rating'] / 5) * 100 }}%; background-color: {{ Auth::user()->pharmacy->theme_color ?? '#2563eb' }};"></div>
+        <div class="bg-white rounded-2xl shadow-xs border border-slate-200/80 p-6 text-center">
+            <div class="text-2xl sm:text-3xl font-extrabold text-slate-900 mb-1">{{ $ratings['price_rating'] > 0 ? number_format($ratings['price_rating'], 1) : '--' }}</div>
+            <div class="w-full bg-slate-100 rounded-full h-1.5 mt-2 mb-2">
+                <div class="h-1.5 rounded-full transition-all duration-500 bg-[#0D7A5F]" style="width: {{ ($ratings['price_rating'] / 5) * 100 }}%;"></div>
             </div>
             <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Pricing</p>
         </div>
@@ -59,10 +60,10 @@
     <!-- Detailed Category Breakdown -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
         <!-- Left: Category Breakdown -->
-        <div class="lg:col-span-1 bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+        <div class="lg:col-span-1 bg-white rounded-2xl shadow-xs border border-slate-200/80 overflow-hidden">
             <div class="px-6 py-5 border-b border-slate-100 bg-slate-50/50">
-                <h3 class="font-black text-slate-800 flex items-center gap-2 text-sm uppercase tracking-tight">
-                    <i class="fas fa-chart-bar text-blue-600"></i> Rating Breakdown
+                <h3 class="font-bold text-slate-900 flex items-center gap-2 text-xs sm:text-sm uppercase tracking-tight">
+                    <i class="fas fa-chart-bar text-[#0D7A5F]"></i> Rating Breakdown
                 </h3>
             </div>
             <div class="p-6 space-y-5">
@@ -82,13 +83,13 @@
                         <div class="flex items-center justify-between mb-1.5">
                             <div class="flex items-center gap-2">
                                 <i class="fas {{ $cat['icon'] }} text-slate-400 text-xs w-4 text-center"></i>
-                                <span class="text-xs font-bold text-slate-600">{{ $cat['label'] }}</span>
+                                <span class="text-xs font-semibold text-slate-600">{{ $cat['label'] }}</span>
                             </div>
-                            <span class="text-xs font-black text-slate-800">{{ $ratings[$cat['key']] > 0 ? number_format($ratings[$cat['key']], 1) : '--' }}</span>
+                            <span class="text-xs font-bold text-slate-800">{{ $ratings[$cat['key']] > 0 ? number_format($ratings[$cat['key']], 1) : '--' }}</span>
                         </div>
-                        <div class="w-full bg-slate-100 rounded-full h-2">
-                            <div class="h-2 rounded-full transition-all duration-700 ease-out" 
-                                 style="width: {{ $ratings[$cat['key']] > 0 ? ($ratings[$cat['key']] / 5) * 100 : 0 }}%; background-color: {{ Auth::user()->pharmacy->theme_color ?? '#2563eb' }};"></div>
+                        <div class="w-full bg-slate-100 rounded-full h-1.5">
+                            <div class="h-1.5 rounded-full transition-all duration-700 ease-out bg-[#0D7A5F]" 
+                                 style="width: {{ $ratings[$cat['key']] > 0 ? ($ratings[$cat['key']] / 5) * 100 : 0 }}%;"></div>
                         </div>
                     </div>
                 @endforeach
@@ -96,12 +97,12 @@
         </div>
 
         <!-- Right: Recent Reviews Feed -->
-        <div class="lg:col-span-2 bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+        <div class="lg:col-span-2 bg-white rounded-2xl shadow-xs border border-slate-200/80 overflow-hidden flex flex-col">
             <div class="px-6 py-5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
-                <h3 class="font-black text-slate-800 flex items-center gap-2 text-sm uppercase tracking-tight">
-                    <i class="fas fa-comments text-blue-600"></i> Recent Reviews
+                <h3 class="font-bold text-slate-900 flex items-center gap-2 text-xs sm:text-sm uppercase tracking-tight">
+                    <i class="fas fa-comments text-[#0D7A5F]"></i> Recent Reviews
                 </h3>
-                <span class="text-xs font-bold text-slate-400 bg-slate-100 px-3 py-1 rounded-lg">{{ $reviews->count() }} shown</span>
+                <span class="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-lg">{{ $reviews->count() }} shown</span>
             </div>
 
             <div class="flex-1 overflow-y-auto max-h-[600px] custom-scrollbar">
@@ -109,14 +110,13 @@
                     <div class="p-6 border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors">
                         <div class="flex items-start gap-4">
                             <!-- User Avatar -->
-                            <div class="w-10 h-10 rounded-full flex items-center justify-center shrink-0 text-white text-sm font-black shadow-sm"
-                                 style="background-color: {{ Auth::user()->pharmacy->theme_color ?? '#2563eb' }};">
+                            <div class="w-10 h-10 rounded-full flex items-center justify-center shrink-0 bg-[#E6F4EA] text-[#0D7A5F] border border-emerald-100 text-sm font-bold shadow-2xs">
                                 {{ strtoupper(substr($review->user->name ?? 'A', 0, 1)) }}
                             </div>
 
                             <div class="flex-1 min-w-0">
                                 <div class="flex items-center justify-between gap-2 mb-1">
-                                    <h4 class="text-sm font-black text-slate-800 truncate">{{ $review->user->name ?? 'Anonymous Patient' }}</h4>
+                                    <h4 class="text-sm font-bold text-slate-900 truncate">{{ $review->user->name ?? 'Anonymous Patient' }}</h4>
                                     <time class="text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">{{ $review->created_at->diffForHumans() }}</time>
                                 </div>
 
@@ -132,10 +132,10 @@
                                             @endif
                                         @endfor
                                     </div>
-                                    <span class="text-xs font-black text-slate-500">{{ number_format($displayRating, 1) }}</span>
+                                    <span class="text-xs font-bold text-slate-600">{{ number_format($displayRating, 1) }}</span>
 
                                     @if($review->order_id)
-                                        <span class="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                                        <span class="text-[10px] font-bold text-[#0D7A5F] bg-[#E6F4EA] px-2 py-0.5 rounded border border-emerald-200/60">
                                             <i class="fas fa-receipt mr-0.5"></i> Order #{{ $review->order_id }}
                                         </span>
                                     @else
@@ -198,10 +198,10 @@
 
     <!-- Delivery Ratings Summary (if applicable) -->
     @if($ratings['delivery_overall'] > 0)
-    <div class="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+    <div class="bg-white rounded-2xl shadow-xs border border-slate-200/80 overflow-hidden">
         <div class="px-6 py-5 border-b border-slate-100 bg-slate-50/50">
-            <h3 class="font-black text-slate-800 flex items-center gap-2 text-sm uppercase tracking-tight">
-                <i class="fas fa-truck text-blue-600"></i> Delivery Experience Ratings
+            <h3 class="font-bold text-slate-900 flex items-center gap-2 text-xs sm:text-sm uppercase tracking-tight">
+                <i class="fas fa-truck text-[#0D7A5F]"></i> Delivery Experience Ratings
             </h3>
         </div>
         <div class="p-6">
