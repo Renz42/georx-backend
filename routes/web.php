@@ -49,11 +49,11 @@ Route::get('/pharmacy/{pharmacy_id}/medicine/{medicine_id}', [PharmacyController
 
     // 2. ADMIN PORTAL
     Route::get('/admin/login', [AuthController::class, 'showAdminLogin'])->name('admin.login');
-    Route::post('/admin/login', [AuthController::class, 'loginAdmin']);
+    Route::post('/admin/login', [AuthController::class, 'loginAdmin'])->middleware('throttle:10,1');
     
     // 3. PHARMACY PORTAL
     Route::get('/pharmacy/login', [AuthController::class, 'showPharmacyLogin'])->name('pharmacy.login');
-    Route::post('/pharmacy/login', [AuthController::class, 'loginPharmacy']);
+    Route::post('/pharmacy/login', [AuthController::class, 'loginPharmacy'])->middleware('throttle:10,1');
     
     // Pharmacy Partner Registration
     Route::get('/pharmacy/register', [AuthController::class, 'showPharmacyRegister'])->name('pharmacy.register');

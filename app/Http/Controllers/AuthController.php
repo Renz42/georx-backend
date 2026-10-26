@@ -40,7 +40,7 @@ class AuthController extends Controller
                 Auth::guard('web')->logout();
                 $request->session()->invalidate();
                 $request->session()->regenerateToken();
-                return back()->with('error', 'This login page is for customers only.');
+                return back()->withErrors(['email' => 'Invalid credentials.'])->onlyInput('email');
             }
 
             // Check if patient email is pending verification
@@ -85,7 +85,7 @@ class AuthController extends Controller
                 Auth::guard('admin')->logout();
                 $request->session()->invalidate();
                 $request->session()->regenerateToken();
-                return back()->with('error', 'Access Denied. Administrator only.');
+                return back()->withErrors(['email' => 'Invalid credentials.'])->onlyInput('email');
             }
 
             $request->session()->regenerate();
@@ -122,7 +122,7 @@ class AuthController extends Controller
                 Auth::guard('pharmacy')->logout();
                 $request->session()->invalidate();
                 $request->session()->regenerateToken();
-                return back()->with('error', 'Access Denied. Pharmacy staff only.');
+                return back()->withErrors(['email' => 'Invalid credentials.'])->onlyInput('email');
             }
 
             if ($user->pharmacy && !$user->pharmacy->is_approved) {

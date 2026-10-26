@@ -14,21 +14,13 @@
                     fontFamily: { sans: ['Outfit', 'sans-serif'] },
                     colors: {
                         geo: {
-                            900: '#0F172A',
-                            800: '#1E293B',
-                            700: '#1F2E2C',
-                            600: '#2F7E6A',
-                            500: '#63C6A7',
-                            400: '#BFE8D6',
-                            300: '#A0D8C4',
-                            200: '#D5F0E5',
-                            100: '#E9F7F2',
-                            50: '#F5FBF8'
-                        },
-                        brand: {
-                            emerald: '#00897B',
-                            emeraldDark: '#00796B',
-                            emeraldLight: '#E0F2F1'
+                            forest: '#0A4D44',
+                            dark: '#06332E',
+                            primary: '#2F7E6A',
+                            mint: '#63C6A7',
+                            palemint: '#E9F7F2',
+                            maintext: '#0F172A',
+                            mutedtext: '#64748B'
                         }
                     }
                 }
@@ -36,335 +28,229 @@
         }
     </script>
     <style>
-        /* Smooth subtle gradient background */
         body {
-            background: radial-gradient(circle at 50% 50%, #F8FCFA 0%, #EEF8F4 50%, #E6F5F0 100%);
+            background-color: #E9F7F2;
             min-height: 100vh;
         }
-
-        /* Ambient floating effect for background watermark crosses */
         @media (prefers-reduced-motion: reduce) {
-            .ambient-cross {
-                animation: none !important;
+            * {
+                transition-duration: 0.01ms !important;
+                animation-duration: 0.01ms !important;
             }
         }
     </style>
 </head>
-<body class="relative min-h-screen flex flex-col justify-center items-center p-4 sm:p-6 md:p-8 font-sans text-geo-900 antialiased selection:bg-geo-500 selection:text-white overflow-x-hidden">
+<body class="relative min-h-screen flex flex-col justify-center items-center p-4 sm:p-6 md:p-8 font-sans text-geo-maintext antialiased selection:bg-geo-primary selection:text-white overflow-x-hidden">
 
     <!-- ================================================================= -->
-    <!-- DECORATIVE BACKGROUND MEDICAL CROSSES & CONSTELLATION NETWORK      -->
-    <!-- Lightweight inline SVGs, pointer-events: none, behind all content -->
+    <!-- TOPOGRAPHIC CONTOUR MAP VECTOR BACKGROUND                         -->
+    <!-- Smooth elevation contours matching the "Geo" identity of GeoRx    -->
+    <!-- Pure inline SVG — zero external network dependencies              -->
     <!-- ================================================================= -->
+    <div class="absolute inset-0 pointer-events-none select-none overflow-hidden z-0" aria-hidden="true">
+        <svg class="w-full h-full object-cover opacity-60" viewBox="0 0 1440 900" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+            <!-- Top-Left Nested Topographic Contours -->
+            <path d="M-80 60 C 120 40, 240 180, 280 340 C 310 460, 240 600, 100 700 C -20 780, -120 740, -180 680" stroke="#63C6A7" stroke-width="1.25" stroke-opacity="0.55" fill="none"/>
+            <path d="M-50 100 C 140 85, 200 200, 240 330 C 270 430, 210 540, 90 620 C -10 690, -90 660, -140 610" stroke="#63C6A7" stroke-width="1.25" stroke-opacity="0.5" fill="none"/>
+            <path d="M-20 140 C 150 130, 170 230, 200 320 C 230 400, 180 490, 80 550 C 0 600, -60 580, -100 540" stroke="#63C6A7" stroke-width="1.25" stroke-opacity="0.45" fill="none"/>
+            <path d="M10 180 C 130 170, 140 250, 160 310 C 180 370, 150 430, 70 470 C 10 510, -30 490, -60 460" stroke="#63C6A7" stroke-width="1.25" stroke-opacity="0.4" fill="none"/>
+            <path d="M40 220 C 110 210, 110 260, 120 300 C 130 340, 110 370, 60 400 C 20 420, -10 410, -20 390" stroke="#63C6A7" stroke-width="1.25" stroke-opacity="0.35" fill="none"/>
 
-    <!-- Left Watermark Cross -->
-    <div class="ambient-cross absolute left-[-160px] sm:left-[-120px] md:left-[-60px] lg:left-[-20px] xl:left-[3%] top-1/2 -translate-y-1/2 w-[340px] sm:w-[420px] md:w-[480px] lg:w-[540px] h-[340px] sm:h-[420px] md:h-[480px] lg:h-[540px] pointer-events-none select-none z-0 opacity-40 md:opacity-60 lg:opacity-75" aria-hidden="true">
-        <svg viewBox="0 0 400 400" class="w-full h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-                <clipPath id="leftCrossClip">
-                    <rect x="145" y="10" width="110" height="380" rx="28" />
-                    <rect x="10" y="145" width="380" height="110" rx="28" />
-                </clipPath>
-            </defs>
-            <!-- Cross Outline & Soft Mint Fill -->
-            <rect x="145" y="10" width="110" height="380" rx="28" stroke="#63C6A7" stroke-width="1.75" stroke-opacity="0.35" fill="#E9F7F2" fill-opacity="0.25" />
-            <rect x="10" y="145" width="380" height="110" rx="28" stroke="#63C6A7" stroke-width="1.75" stroke-opacity="0.35" fill="#E9F7F2" fill-opacity="0.25" />
-            <!-- Constellation Network Mesh clipped inside the cross -->
-            <g clip-path="url(#leftCrossClip)" stroke="#2F7E6A" stroke-width="1" stroke-opacity="0.32" fill="#2F7E6A">
-                <!-- Primary Nodes & Triangular Connections -->
-                <line x1="200" y1="35" x2="165" y2="85" />
-                <line x1="200" y1="35" x2="235" y2="85" />
-                <line x1="165" y1="85" x2="235" y2="85" />
-                <line x1="165" y1="85" x2="200" y2="135" />
-                <line x1="235" y1="85" x2="200" y2="135" />
-                <line x1="200" y1="135" x2="155" y2="155" />
-                <line x1="200" y1="135" x2="245" y2="155" />
+            <!-- Top-Right Organic Ridge Lines -->
+            <path d="M 1520 80 C 1320 60, 1200 190, 1160 350 C 1130 480, 1200 620, 1340 720 C 1460 800, 1560 760, 1620 700" stroke="#63C6A7" stroke-width="1.25" stroke-opacity="0.55" fill="none"/>
+            <path d="M 1490 120 C 1300 100, 1230 220, 1200 340 C 1170 440, 1230 550, 1350 630 C 1450 700, 1530 670, 1580 620" stroke="#63C6A7" stroke-width="1.25" stroke-opacity="0.5" fill="none"/>
+            <path d="M 1460 160 C 1280 140, 1260 250, 1230 330 C 1200 410, 1250 490, 1340 550 C 1420 600, 1480 580, 1520 540" stroke="#63C6A7" stroke-width="1.25" stroke-opacity="0.45" fill="none"/>
+            <path d="M 1430 200 C 1290 180, 1280 270, 1260 320 C 1240 380, 1270 430, 1330 470 C 1390 510, 1430 490, 1460 460" stroke="#63C6A7" stroke-width="1.25" stroke-opacity="0.4" fill="none"/>
+            <path d="M 1400 240 C 1310 220, 1300 280, 1290 310 C 1270 340, 1290 380, 1320 410 C 1360 430, 1390 420, 1410 400" stroke="#63C6A7" stroke-width="1.25" stroke-opacity="0.35" fill="none"/>
 
-                <!-- Left Arm Network -->
-                <line x1="35" y1="200" x2="85" y2="165" />
-                <line x1="35" y1="200" x2="85" y2="235" />
-                <line x1="85" y1="165" x2="85" y2="235" />
-                <line x1="85" y1="165" x2="135" y2="200" />
-                <line x1="85" y1="235" x2="135" y2="200" />
-                <line x1="135" y1="200" x2="155" y2="155" />
-                <line x1="135" y1="200" x2="155" y2="245" />
-
-                <!-- Center Intersection Network -->
-                <line x1="155" y1="155" x2="245" y2="155" />
-                <line x1="155" y1="155" x2="200" y2="200" />
-                <line x1="245" y1="155" x2="200" y2="200" />
-                <line x1="155" y1="245" x2="200" y2="200" />
-                <line x1="245" y1="245" x2="200" y2="200" />
-                <line x1="155" y1="245" x2="245" y2="245" />
-
-                <!-- Right Arm Network -->
-                <line x1="365" y1="200" x2="315" y2="165" />
-                <line x1="365" y1="200" x2="315" y2="235" />
-                <line x1="315" y1="165" x2="315" y2="235" />
-                <line x1="315" y1="165" x2="265" y2="200" />
-                <line x1="315" y1="235" x2="265" y2="200" />
-                <line x1="265" y1="200" x2="245" y2="155" />
-                <line x1="265" y1="200" x2="245" y2="245" />
-
-                <!-- Bottom Arm Network -->
-                <line x1="200" y1="365" x2="165" y2="315" />
-                <line x1="200" y1="365" x2="235" y2="315" />
-                <line x1="165" y1="315" x2="235" y2="315" />
-                <line x1="165" y1="315" x2="200" y2="265" />
-                <line x1="235" y1="315" x2="200" y2="265" />
-                <line x1="200" y1="265" x2="155" y2="245" />
-                <line x1="200" y1="265" x2="245" y2="245" />
-
-                <!-- Constellation Nodes (Points) -->
-                <circle cx="200" cy="35" r="3.5" fill-opacity="0.6" />
-                <circle cx="165" cy="85" r="3" fill-opacity="0.5" />
-                <circle cx="235" cy="85" r="3" fill-opacity="0.5" />
-                <circle cx="200" cy="135" r="3.5" fill-opacity="0.6" />
-                <circle cx="35" cy="200" r="3.5" fill-opacity="0.6" />
-                <circle cx="85" cy="165" r="3" fill-opacity="0.5" />
-                <circle cx="85" cy="235" r="3" fill-opacity="0.5" />
-                <circle cx="135" cy="200" r="3.5" fill-opacity="0.6" />
-                <circle cx="155" cy="155" r="3.5" fill-opacity="0.7" />
-                <circle cx="245" cy="155" r="3.5" fill-opacity="0.7" />
-                <circle cx="200" cy="200" r="4" fill-opacity="0.8" />
-                <circle cx="155" cy="245" r="3.5" fill-opacity="0.7" />
-                <circle cx="245" cy="245" r="3.5" fill-opacity="0.7" />
-                <circle cx="265" cy="200" r="3.5" fill-opacity="0.6" />
-                <circle cx="315" cy="165" r="3" fill-opacity="0.5" />
-                <circle cx="315" cy="235" r="3" fill-opacity="0.5" />
-                <circle cx="365" cy="200" r="3.5" fill-opacity="0.6" />
-                <circle cx="200" cy="265" r="3.5" fill-opacity="0.6" />
-                <circle cx="165" cy="315" r="3" fill-opacity="0.5" />
-                <circle cx="235" cy="315" r="3" fill-opacity="0.5" />
-                <circle cx="200" cy="365" r="3.5" fill-opacity="0.6" />
-            </g>
-        </svg>
-    </div>
-
-    <!-- Right Watermark Cross -->
-    <div class="ambient-cross absolute right-[-160px] sm:right-[-120px] md:right-[-60px] lg:right-[-20px] xl:right-[3%] top-1/2 -translate-y-1/2 w-[340px] sm:w-[420px] md:w-[480px] lg:w-[540px] h-[340px] sm:h-[420px] md:h-[480px] lg:h-[540px] pointer-events-none select-none z-0 opacity-40 md:opacity-60 lg:opacity-75" aria-hidden="true">
-        <svg viewBox="0 0 400 400" class="w-full h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-                <clipPath id="rightCrossClip">
-                    <rect x="145" y="10" width="110" height="380" rx="28" />
-                    <rect x="10" y="145" width="380" height="110" rx="28" />
-                </clipPath>
-            </defs>
-            <!-- Cross Outline & Soft Mint Fill -->
-            <rect x="145" y="10" width="110" height="380" rx="28" stroke="#63C6A7" stroke-width="1.75" stroke-opacity="0.35" fill="#E9F7F2" fill-opacity="0.25" />
-            <rect x="10" y="145" width="380" height="110" rx="28" stroke="#63C6A7" stroke-width="1.75" stroke-opacity="0.35" fill="#E9F7F2" fill-opacity="0.25" />
-            <!-- Constellation Network Mesh clipped inside the cross -->
-            <g clip-path="url(#rightCrossClip)" stroke="#2F7E6A" stroke-width="1" stroke-opacity="0.32" fill="#2F7E6A">
-                <!-- Diagonal network connections for visual variety -->
-                <line x1="200" y1="35" x2="165" y2="85" />
-                <line x1="200" y1="35" x2="235" y2="85" />
-                <line x1="165" y1="85" x2="235" y2="85" />
-                <line x1="165" y1="85" x2="200" y2="135" />
-                <line x1="235" y1="85" x2="200" y2="135" />
-                <line x1="200" y1="135" x2="155" y2="155" />
-                <line x1="200" y1="135" x2="245" y2="155" />
-
-                <line x1="35" y1="200" x2="85" y2="165" />
-                <line x1="35" y1="200" x2="85" y2="235" />
-                <line x1="85" y1="165" x2="85" y2="235" />
-                <line x1="85" y1="165" x2="135" y2="200" />
-                <line x1="85" y1="235" x2="135" y2="200" />
-                <line x1="135" y1="200" x2="155" y2="155" />
-                <line x1="135" y1="200" x2="155" y2="245" />
-
-                <line x1="155" y1="155" x2="245" y2="155" />
-                <line x1="155" y1="155" x2="200" y2="200" />
-                <line x1="245" y1="155" x2="200" y2="200" />
-                <line x1="155" y1="245" x2="200" y2="200" />
-                <line x1="245" y1="245" x2="200" y2="200" />
-                <line x1="155" y1="245" x2="245" y2="245" />
-
-                <line x1="365" y1="200" x2="315" y2="165" />
-                <line x1="365" y1="200" x2="315" y2="235" />
-                <line x1="315" y1="165" x2="315" y2="235" />
-                <line x1="315" y1="165" x2="265" y2="200" />
-                <line x1="315" y1="235" x2="265" y2="200" />
-                <line x1="265" y1="200" x2="245" y2="155" />
-                <line x1="265" y1="200" x2="245" y2="245" />
-
-                <line x1="200" y1="365" x2="165" y2="315" />
-                <line x1="200" y1="365" x2="235" y2="315" />
-                <line x1="165" y1="315" x2="235" y2="315" />
-                <line x1="165" y1="315" x2="200" y2="265" />
-                <line x1="235" y1="315" x2="200" y2="265" />
-                <line x1="200" y1="265" x2="155" y2="245" />
-                <line x1="200" y1="265" x2="245" y2="245" />
-
-                <circle cx="200" cy="35" r="3.5" fill-opacity="0.6" />
-                <circle cx="165" cy="85" r="3" fill-opacity="0.5" />
-                <circle cx="235" cy="85" r="3" fill-opacity="0.5" />
-                <circle cx="200" cy="135" r="3.5" fill-opacity="0.6" />
-                <circle cx="35" cy="200" r="3.5" fill-opacity="0.6" />
-                <circle cx="85" cy="165" r="3" fill-opacity="0.5" />
-                <circle cx="85" cy="235" r="3" fill-opacity="0.5" />
-                <circle cx="135" cy="200" r="3.5" fill-opacity="0.6" />
-                <circle cx="155" cy="155" r="3.5" fill-opacity="0.7" />
-                <circle cx="245" cy="155" r="3.5" fill-opacity="0.7" />
-                <circle cx="200" cy="200" r="4" fill-opacity="0.8" />
-                <circle cx="155" cy="245" r="3.5" fill-opacity="0.7" />
-                <circle cx="245" cy="245" r="3.5" fill-opacity="0.7" />
-                <circle cx="265" cy="200" r="3.5" fill-opacity="0.6" />
-                <circle cx="315" cy="165" r="3" fill-opacity="0.5" />
-                <circle cx="315" cy="235" r="3" fill-opacity="0.5" />
-                <circle cx="365" cy="200" r="3.5" fill-opacity="0.6" />
-                <circle cx="200" cy="265" r="3.5" fill-opacity="0.6" />
-                <circle cx="165" cy="315" r="3" fill-opacity="0.5" />
-                <circle cx="235" cy="315" r="3" fill-opacity="0.5" />
-                <circle cx="200" cy="365" r="3.5" fill-opacity="0.6" />
-            </g>
+            <!-- Sweeping Across-Screen Gentle Isohypses -->
+            <path d="M -100 820 C 250 850, 480 720, 720 740 C 960 760, 1180 870, 1550 810" stroke="#63C6A7" stroke-width="1" stroke-opacity="0.3" fill="none"/>
+            <path d="M -80 860 C 270 890, 500 760, 740 780 C 980 800, 1200 910, 1570 850" stroke="#63C6A7" stroke-width="1" stroke-opacity="0.25" fill="none"/>
+            <path d="M -120 70 C 300 40, 600 130, 850 110 C 1100 90, 1350 20, 1560 50" stroke="#63C6A7" stroke-width="1" stroke-opacity="0.25" fill="none"/>
         </svg>
     </div>
 
     <!-- ================================================================= -->
-    <!-- MAIN CONTENT CARD CONTAINER                                       -->
+    <!-- MAIN HORIZONTAL SPLIT CARD CONTAINER                              -->
+    <!-- Left: Deep Forest Teal Brand Panel | Right: Clean Form Panel      -->
     <!-- ================================================================= -->
-    <main class="relative z-10 max-w-[430px] w-full my-auto">
-        
-        <!-- Main Login Card -->
-        <div class="bg-white rounded-2xl sm:rounded-3xl p-7 sm:p-9 md:p-10 shadow-[0_20px_50px_rgba(15,23,42,0.07)] border border-slate-100 text-center transition-all">
-            
-            <!-- Compact Brand Header: Rounded Emerald Medical Cross + "GeoRx" Typography -->
-            <div class="flex items-center justify-center gap-3 mb-5">
-                <svg class="w-9 h-9 text-[#00897B] shrink-0" viewBox="0 0 36 36" fill="currentColor" aria-hidden="true">
-                    <path d="M14 4a3 3 0 0 1 6 0v8h8a3 3 0 0 1 0 6h-8v8a3 3 0 0 1-6 0v-8H6a3 3 0 0 1 0-6h8V4z" />
-                </svg>
-                <span class="text-3xl font-extrabold tracking-tight text-[#0F172A]">GeoRx</span>
+    <main class="relative z-10 max-w-[880px] w-full my-auto flex flex-col items-center">
+
+        <!-- Split Card Body -->
+        <div class="w-full bg-white rounded-[2rem] sm:rounded-[2.25rem] shadow-[0_25px_60px_-15px_rgba(10,77,68,0.20)] border border-slate-200/70 overflow-hidden flex flex-col md:flex-row transition-all">
+
+            <!-- ───────────────────────────────────────────────────────────── -->
+            <!-- LEFT PANEL: Deep Botanical Teal Gradient Branding             -->
+            <!-- ───────────────────────────────────────────────────────────── -->
+            <div class="md:w-5/12 lg:w-5/12 relative flex flex-col items-center justify-center p-8 sm:p-10 md:p-12 text-center text-white overflow-hidden select-none"
+                 style="background: linear-gradient(150deg, #0A4D44 0%, #06332E 100%);">
+
+                <!-- Ambient Radial Glow Behind Logo -->
+                <div class="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(99,198,167,0.18)_0%,transparent_70%)] pointer-events-none" aria-hidden="true"></div>
+
+                <!-- Brand Emblem & Typography Container -->
+                <div class="relative z-10 flex flex-col items-center my-auto py-2">
+                    <!-- Official High-Resolution GeoRx Logo Emblem -->
+                    <div class="w-32 sm:w-36 md:w-40 h-32 sm:h-36 md:h-40 flex items-center justify-center">
+                        <img src="{{ asset('images/georx-logo.png') }}"
+                             alt="GeoRx - Pharmacy & Healthcare Delivery Platform Logo"
+                             class="max-w-full max-h-full object-contain drop-shadow-[0_12px_24px_rgba(0,0,0,0.4)] pointer-events-none"
+                             width="160"
+                             height="160"
+                             draggable="false">
+                    </div>
+
+                    <!-- Clean GeoRx Wordmark -->
+                    <span class="text-3xl sm:text-4xl font-extrabold tracking-tight text-white mt-4 drop-shadow-sm font-sans">
+                        GeoRx
+                    </span>
+
+                    <!-- Clear Pharmacy Portal Identification -->
+                    <div class="mt-3 text-center">
+                        <h2 class="text-xs sm:text-sm font-extrabold tracking-[0.2em] text-[#63C6A7] uppercase">
+                            Pharmacy Portal
+                        </h2>
+                        <p class="text-[11px] sm:text-xs text-[#E9F7F2]/80 mt-0.5 font-normal">
+                            Manage your pharmacy and orders.
+                        </p>
+                    </div>
+                </div>
             </div>
 
-            <!-- Title & Subtitle -->
-            <h1 class="text-xl sm:text-2xl font-black text-[#0F172A] tracking-wider uppercase mb-1">
-                Pharmacy Portal
-            </h1>
-            <p class="text-slate-500 text-xs sm:text-sm font-normal mb-6">
-                Manage your pharmacy and orders.
-            </p>
+            <!-- ───────────────────────────────────────────────────────────── -->
+            <!-- RIGHT PANEL: Clean White Authentication Form Panel            -->
+            <!-- ───────────────────────────────────────────────────────────── -->
+            <div class="md:w-7/12 lg:w-7/12 bg-white p-7 sm:p-9 md:p-12 flex flex-col justify-center text-left">
 
-            <!-- Session Error Alert Banner -->
-            @if(session('error'))
-                <div class="mb-5 p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs sm:text-sm flex items-start gap-2.5 text-left" role="alert">
-                    <i class="fas fa-circle-exclamation mt-0.5 text-red-500 text-base shrink-0" aria-hidden="true"></i>
-                    <span class="font-semibold leading-relaxed">{{ session('error') }}</span>
-                </div>
-            @endif
-
-            <!-- Session Success Alert Banner (e.g. from registration redirect) -->
-            @if(session('success'))
-                <div class="mb-5 p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs sm:text-sm flex items-start gap-2.5 text-left" role="alert">
-                    <i class="fas fa-circle-check mt-0.5 text-emerald-600 text-base shrink-0" aria-hidden="true"></i>
-                    <span class="font-semibold leading-relaxed">{{ session('success') }}</span>
-                </div>
-            @endif
-
-            @if(session('status'))
-                <div class="mb-5 p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs sm:text-sm flex items-start gap-2.5 text-left" role="alert">
-                    <i class="fas fa-circle-info mt-0.5 text-emerald-600 text-base shrink-0" aria-hidden="true"></i>
-                    <span class="font-semibold leading-relaxed">{{ session('status') }}</span>
-                </div>
-            @endif
-
-            <!-- Form -->
-            <form method="POST" action="{{ route('pharmacy.login') }}" class="space-y-4 text-left">
-                @csrf
-
-                <!-- Pharmacy Email Input -->
-                <div>
-                    <label for="pharmacyEmail" class="block text-xs sm:text-sm font-semibold text-slate-700 mb-1.5">
-                        Pharmacy Email
-                    </label>
-                    <input type="email" id="pharmacyEmail" name="email" value="{{ old('email') }}" required autocomplete="email" autofocus
-                        class="w-full px-4 py-3 bg-[#F8FAFC] focus:bg-white border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 font-medium focus:outline-none focus:ring-2 focus:ring-[#00897B]/30 focus:border-[#00897B] transition-all text-sm shadow-sm"
-                        placeholder="store@pharmacy.com">
-                    @error('email')
-                        <p class="text-red-600 text-xs font-semibold mt-1.5 flex items-center gap-1" role="alert">
-                            <i class="fas fa-circle-exclamation text-[10px]" aria-hidden="true"></i> {{ $message }}
-                        </p>
-                    @enderror
-                </div>
-
-                <!-- Password Input with Eye Visibility Toggle -->
-                <div>
-                    <label for="pharmacyPassword" class="block text-xs sm:text-sm font-semibold text-slate-700 mb-1.5">
-                        Password
-                    </label>
-                    <div class="relative">
-                        <input type="password" id="pharmacyPassword" name="password" required autocomplete="current-password"
-                            class="w-full pl-4 pr-11 py-3 bg-[#F8FAFC] focus:bg-white border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 font-medium focus:outline-none focus:ring-2 focus:ring-[#00897B]/30 focus:border-[#00897B] transition-all text-sm shadow-sm"
-                            placeholder="••••••••">
-                        <button type="button" id="togglePasswordBtn" aria-label="Toggle password visibility" aria-pressed="false"
-                            class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none focus:text-[#00897B] p-1.5 transition-colors">
-                            <i id="passwordEyeIcon" class="fas fa-eye-slash text-sm" aria-hidden="true"></i>
-                        </button>
-                    </div>
-                    @error('password')
-                        <p class="text-red-600 text-xs font-semibold mt-1.5 flex items-center gap-1" role="alert">
-                            <i class="fas fa-circle-exclamation text-[10px]" aria-hidden="true"></i> {{ $message }}
-                        </p>
-                    @enderror
-                </div>
-
-                <!-- Action Button -->
-                <div class="pt-2">
-                    <button type="submit" 
-                        class="w-full bg-[#00897B] hover:bg-[#00796B] text-white font-bold py-3.5 px-4 rounded-xl shadow-[0_4px_14px_rgba(0,137,123,0.35)] hover:shadow-[0_6px_20px_rgba(0,137,123,0.45)] focus:outline-none focus:ring-4 focus:ring-[#00897B]/30 transition-all active:scale-[0.99] text-sm tracking-wide">
+                <!-- Header Block -->
+                <div class="mb-6">
+                    <h1 class="text-2xl sm:text-3xl font-extrabold text-[#0F172A] tracking-tight mb-1">
                         Sign In
-                    </button>
-                </div>
-
-                <!-- Secondary Contextual Action Link -->
-                <div class="text-center pt-2">
-                    <p class="text-xs sm:text-sm text-slate-600 font-medium">
-                        New pharmacy? 
-                        <a href="{{ route('pharmacy.register') }}" class="font-bold text-[#00897B] hover:text-[#00796B] hover:underline transition-colors">
-                            Register here
-                        </a>
+                    </h1>
+                    <p class="text-[#64748B] text-xs sm:text-sm font-normal">
+                        Sign in to your account.
                     </p>
                 </div>
-            </form>
 
-            <!-- Supporting Information & Trust Micro-Badge -->
-            <div class="mt-6 pt-5 border-t border-slate-100 flex flex-col items-center gap-2.5">
-                <!-- Forgot Password Destination -->
-                <a href="mailto:support@georx.com?subject=GEORX%20Pharmacy%20Portal%20Password%20Reset%20Request" 
-                   class="text-xs font-medium text-slate-500 hover:text-[#00897B] transition-colors">
-                    Forgot password?
-                </a>
+                <!-- Session Error Alert Banner -->
+                @if(session('error'))
+                    <div class="mb-5 p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs sm:text-sm flex items-start gap-2.5" role="alert">
+                        <i class="fas fa-circle-exclamation mt-0.5 text-red-500 text-base shrink-0" aria-hidden="true"></i>
+                        <span class="font-semibold leading-relaxed">{{ session('error') }}</span>
+                    </div>
+                @endif
 
-                <!-- Truthful, Neutral Security Statement (No unverified claims) -->
-                <div class="inline-flex items-center gap-1.5 text-[11px] sm:text-xs text-slate-400 font-normal">
-                    <i class="fas fa-lock text-[10px] text-slate-400" aria-hidden="true"></i>
-                    <span>Secure access to the GEORX Pharmacy Portal</span>
-                </div>
+                <!-- Session Success Alert Banner -->
+                @if(session('success'))
+                    <div class="mb-5 p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs sm:text-sm flex items-start gap-2.5" role="alert">
+                        <i class="fas fa-circle-check mt-0.5 text-emerald-600 text-base shrink-0" aria-hidden="true"></i>
+                        <span class="font-semibold leading-relaxed">{{ session('success') }}</span>
+                    </div>
+                @endif
+
+                @if(session('status'))
+                    <div class="mb-5 p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs sm:text-sm flex items-start gap-2.5" role="alert">
+                        <i class="fas fa-circle-info mt-0.5 text-emerald-600 text-base shrink-0" aria-hidden="true"></i>
+                        <span class="font-semibold leading-relaxed">{{ session('status') }}</span>
+                    </div>
+                @endif
+
+                <!-- Login Form -->
+                <form method="POST" action="{{ route('pharmacy.login') }}" class="space-y-4">
+                    @csrf
+
+                    <!-- Pharmacy Email Input -->
+                    <div>
+                        <label for="pharmacyEmail" class="block text-xs sm:text-sm font-bold text-[#0F172A] mb-1.5">
+                            Pharmacy Email
+                        </label>
+                        <input type="email" id="pharmacyEmail" name="email" value="{{ old('email') }}" required autocomplete="email" autofocus
+                            class="w-full px-4 py-3.5 bg-white border border-slate-300 rounded-xl text-[#0F172A] placeholder:text-slate-400 font-medium focus:outline-none focus:ring-2 focus:ring-[#2F7E6A]/30 focus:border-[#2F7E6A] transition-all text-sm shadow-sm"
+                            placeholder="store@pharmacy.com">
+                        @error('email')
+                            <p class="text-red-600 text-xs font-semibold mt-1.5 flex items-center gap-1" role="alert">
+                                <i class="fas fa-circle-exclamation text-[10px]" aria-hidden="true"></i> {{ $message }}
+                            </p>
+                        @enderror
+                    </div>
+
+                    <!-- Password Input with Eye Visibility Toggle -->
+                    <div>
+                        <label for="pharmacyPassword" class="block text-xs sm:text-sm font-bold text-[#0F172A] mb-1.5">
+                            Password
+                        </label>
+                        <div class="relative">
+                            <input type="password" id="pharmacyPassword" name="password" required autocomplete="current-password"
+                                class="w-full pl-4 pr-12 py-3.5 bg-white border border-slate-300 rounded-xl text-[#0F172A] placeholder:text-slate-400 font-medium focus:outline-none focus:ring-2 focus:ring-[#2F7E6A]/30 focus:border-[#2F7E6A] transition-all text-sm shadow-sm"
+                                placeholder="••••••••">
+                            <button type="button" id="togglePasswordBtn" aria-label="Toggle password visibility" aria-pressed="false"
+                                class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#2F7E6A] focus:outline-none focus:text-[#2F7E6A] w-10 h-10 flex items-center justify-center transition-colors">
+                                <i id="passwordEyeIcon" class="fas fa-eye-slash text-sm" aria-hidden="true"></i>
+                            </button>
+                        </div>
+                        @error('password')
+                            <p class="text-red-600 text-xs font-semibold mt-1.5 flex items-center gap-1" role="alert">
+                                <i class="fas fa-circle-exclamation text-[10px]" aria-hidden="true"></i> {{ $message }}
+                            </p>
+                        @enderror
+                    </div>
+
+                    <!-- Action Button -->
+                    <div class="pt-2">
+                        <button type="submit"
+                            class="w-full bg-[#2F7E6A] hover:bg-[#0A4D44] text-white font-bold py-3.5 px-4 rounded-xl shadow-[0_4px_14px_rgba(47,126,106,0.30)] hover:shadow-[0_6px_20px_rgba(10,77,68,0.40)] focus:outline-none focus:ring-4 focus:ring-[#2F7E6A]/30 transition-all active:scale-[0.99] text-sm tracking-wide">
+                            Sign In
+                        </button>
+                    </div>
+
+                    <!-- Footer Secondary Action Links: Register Here | Forgot Password? -->
+                    <div class="flex items-center justify-center gap-2.5 text-xs sm:text-sm font-medium pt-3 text-[#64748B]">
+                        <a href="{{ route('pharmacy.register') }}" class="font-bold text-[#2F7E6A] hover:text-[#0A4D44] hover:underline transition-colors">
+                            Register Here
+                        </a>
+                        <span class="text-slate-300 font-normal">|</span>
+                        <a href="mailto:support@georx.com?subject=GEORX%20Pharmacy%20Portal%20Password%20Reset%20Request"
+                           class="text-[#64748B] hover:text-[#2F7E6A] hover:underline transition-colors">
+                            Forgot Password?
+                        </a>
+                    </div>
+                </form>
+
             </div>
         </div>
 
-        <!-- Back to Map Search Link -->
-        <div class="text-center mt-6">
-            <a href="{{ url('/') }}" class="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors">
-                <i class="fas fa-arrow-left text-[10px]" aria-hidden="true"></i> Return to Map Search
-            </a>
-        </div>
+        <!-- Return to Map Search Link -->
+        <a href="{{ url('/') }}"
+           class="inline-flex items-center gap-2 text-xs sm:text-sm font-semibold text-[#64748B] hover:text-[#2F7E6A] transition-colors mt-6 z-10 select-none group">
+            <i class="fas fa-arrow-left text-xs transition-transform group-hover:-translate-x-1" aria-hidden="true"></i>
+            <span>Return to Map Search</span>
+        </a>
     </main>
 
-    <!-- Password Visibility Toggle Script -->
+    <!-- ================================================================= -->
+    <!-- ACCESSIBILITY & INTERACTIVITY SCRIPT                               -->
+    <!-- Password Visibility Toggle Handler                                 -->
+    <!-- ================================================================= -->
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            const toggleBtn = document.getElementById('togglePasswordBtn');
-            const passwordInput = document.getElementById('pharmacyPassword');
-            const eyeIcon = document.getElementById('passwordEyeIcon');
+            var toggleBtn = document.getElementById('togglePasswordBtn');
+            var passwordInput = document.getElementById('pharmacyPassword');
+            var eyeIcon = document.getElementById('passwordEyeIcon');
 
             if (toggleBtn && passwordInput && eyeIcon) {
                 toggleBtn.addEventListener('click', function (e) {
-                    e.preventDefault(); // Guarantee form is never submitted
-                    const isPassword = passwordInput.getAttribute('type') === 'password';
+                    e.preventDefault(); // Defensive: Guarantee form is never submitted
+                    var isPassword = passwordInput.getAttribute('type') === 'password';
                     passwordInput.setAttribute('type', isPassword ? 'text' : 'password');
                     toggleBtn.setAttribute('aria-pressed', isPassword ? 'true' : 'false');
-                    eyeIcon.classList.toggle('fa-eye', isPassword);
-                    eyeIcon.classList.toggle('fa-eye-slash', !isPassword);
+
+                    if (isPassword) {
+                        eyeIcon.classList.remove('fa-eye-slash');
+                        eyeIcon.classList.add('fa-eye');
+                    } else {
+                        eyeIcon.classList.remove('fa-eye');
+                        eyeIcon.classList.add('fa-eye-slash');
+                    }
                 });
             }
         });
