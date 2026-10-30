@@ -85,10 +85,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/orders/{id}/review', [\App\Http\Controllers\OrderController::class, 'submitReview']);
     Route::post('/pharmacies/{pharmacy}/reviews', [\App\Http\Controllers\OrderController::class, 'submitPharmacyReview']);
 
-    // Patient Pharmacy Messages
-    Route::get('/messages', [\App\Http\Controllers\MessageController::class, 'apiConversations']);
-    Route::get('/messages/{id}', [\App\Http\Controllers\MessageController::class, 'apiMessages']);
-    Route::post('/messages/{id}', [\App\Http\Controllers\MessageController::class, 'apiSend']);
+    // Patient Pharmacy Messages (Throttled for spam and abuse prevention)
+    Route::get('/pharmacies/{pharmacy}/conversation', [\App\Http\Controllers\MessageController::class, 'apiGetOrCreateConversation'])
+        ->middleware('throttle:60,1');
+    Route::get('/messages', [\App\Http\Controllers\MessageController::class, 'apiConversations'])
+        ->middleware('throttle:60,1');
+    Route::get('/messages/{id}', [\App\Http\Controllers\MessageController::class, 'apiMessages'])
+        ->middleware('throttle:60,1');
+    Route::post('/messages/{id}', [\App\Http\Controllers\MessageController::class, 'apiSend'])
+        ->middleware('throttle:30,1');
 
     // Driver Mobile Routes
     Route::prefix('driver')->group(function () {

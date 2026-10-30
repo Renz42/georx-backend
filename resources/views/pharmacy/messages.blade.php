@@ -17,15 +17,16 @@
         <div class="p-4 border-b border-slate-200/80 bg-white">
             <h3 class="font-bold text-base text-slate-900">Conversations</h3>
         </div>
-        <div class="flex-1 overflow-y-auto custom-scrollbar">
+        <div class="flex-1 overflow-y-auto custom-scrollbar" id="conversations-list">
             @if($conversations->isEmpty())
-                <div class="p-8 text-center text-slate-500">
+                <div class="p-8 text-center text-slate-500" id="no-conversations-placeholder">
                     <i class="fas fa-inbox text-3xl text-slate-300 mb-3"></i>
                     <p class="font-medium text-sm">No messages yet</p>
                 </div>
             @else
                 @foreach($conversations as $conv)
                     <a href="{{ route('pharmacy.messages', $conv->id) }}" 
+                       data-conv-id="{{ $conv->id }}"
                        class="block p-4 border-b border-slate-100 transition-colors {{ isset($conversation) && $conversation->id == $conv->id ? 'bg-[#E6F4EA]/60 border-l-4 border-l-[#0D7A5F]' : 'hover:bg-white' }}">
                         <div class="flex justify-between items-start mb-1">
                             <h4 class="font-bold text-slate-900 text-sm line-clamp-1">{{ $conv->user->name }}</h4>
@@ -66,10 +67,10 @@
             </div>
 
             <!-- Messages List -->
-            <div class="flex-1 p-6 overflow-y-auto custom-scrollbar flex flex-col gap-4 bg-slate-50/50" id="chat-messages">
+            <div class="flex-1 p-6 overflow-y-auto custom-scrollbar flex flex-col gap-4 bg-slate-50/50" id="chat-messages" data-current-conv="{{ $conversation->id }}">
                 @foreach($conversation->messages as $msg)
                     @php $isMine = $msg->sender_id === Auth::id(); @endphp
-                    <div class="flex {{ $isMine ? 'justify-end' : 'justify-start' }}">
+                    <div class="flex {{ $isMine ? 'justify-end' : 'justify-start' }}" data-msg-id="{{ $msg->id }}">
                         <div class="max-w-[70%] {{ $isMine ? 'bg-[#0D7A5F] text-white rounded-2xl rounded-tr-xs' : 'bg-white border border-slate-200 text-slate-800 rounded-2xl rounded-tl-xs shadow-2xs' }} px-4 py-3">
                             <p class="text-sm leading-relaxed">{{ $msg->body }}</p>
                             @if($msg->image_path)
@@ -108,18 +109,113 @@
 </div>
 
 @push('scripts')
-@if(isset($conversation))
 <script>
-    // Scroll to bottom on load
+document.addEventListener('DOMContentLoaded', function() {
     const chatMessages = document.getElementById('chat-messages');
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+    let isPolling = false;
+    let pollInterval = null;
 
-    // Optional: Add basic AJAX submission for smooth feel
-    document.getElementById('chat-form').addEventListener('submit', function(e) {
-        // e.preventDefault(); 
-        // Can implement AJAX here, but standard submit works fine for MVP
+    if (chatMessages) {
+        const activeConvId = chatMessages.getAttribute('data-current-conv');
+
+        // Scroll to bottom on initial load
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+
+        // Auto-refresh messages for active conversation
+        const pollActiveMessages = async () => {
+            if (isPolling || document.hidden) return;
+            isPolling = true;
+
+            try {
+                const response = await fetch(window.location.href, {
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                });
+
+                // Guard against stale thread response if user switched conversations
+                if (chatMessages.getAttribute('data-current-conv') !== activeConvId) {
+                    return;
+                }
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data && Array.isArray(data.messages)) {
+                        let hasNew = false;
+                        const isNearBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < 120;
+
+                        data.messages.forEach(msg => {
+                            if (!document.querySelector(`[data-msg-id="${msg.id}"]`)) {
+                                hasNew = true;
+                                const row = document.createElement('div');
+                                row.className = 'flex ' + (msg.is_mine ? 'justify-end' : 'justify-start');
+                                row.setAttribute('data-msg-id', msg.id);
+
+                                const bubble = document.createElement('div');
+                                bubble.className = 'max-w-[70%] ' + (msg.is_mine 
+                                    ? 'bg-[#0D7A5F] text-white rounded-2xl rounded-tr-xs' 
+                                    : 'bg-white border border-slate-200 text-slate-800 rounded-2xl rounded-tl-xs shadow-2xs') + ' px-4 py-3';
+
+                                const bodyP = document.createElement('p');
+                                bodyP.className = 'text-sm leading-relaxed';
+                                bodyP.textContent = msg.body;
+                                bubble.appendChild(bodyP);
+
+                                if (msg.image_path) {
+                                    const img = document.createElement('img');
+                                    img.src = msg.image_path;
+                                    img.className = 'mt-2 rounded-lg max-h-48 object-cover';
+                                    bubble.appendChild(img);
+                                }
+
+                                const timeP = document.createElement('p');
+                                timeP.className = 'text-[9px] mt-1 text-right ' + (msg.is_mine ? 'text-teal-100' : 'text-slate-400');
+                                timeP.textContent = msg.time || msg.time_ago || '';
+                                bubble.appendChild(timeP);
+
+                                row.appendChild(bubble);
+                                chatMessages.appendChild(row);
+
+                                // Update sidebar preview for this conversation
+                                const sideItem = document.querySelector(`[data-conv-id="${activeConvId}"]`);
+                                if (sideItem) {
+                                    const previewP = sideItem.querySelector('p.text-xs');
+                                    if (previewP) {
+                                        previewP.textContent = (msg.is_mine ? 'You: ' : '') + msg.body;
+                                    }
+                                }
+                            }
+                        });
+
+                        if (hasNew && isNearBottom) {
+                            chatMessages.scrollTop = chatMessages.scrollHeight;
+                        }
+                    }
+                }
+            } catch (err) {
+                // Ignore transient network errors during background poll
+            } finally {
+                isPolling = false;
+            }
+        };
+
+        // Start 10-second polling interval
+        pollInterval = setInterval(pollActiveMessages, 10000);
+
+        // Resume immediately when tab becomes visible
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden) {
+                pollActiveMessages();
+            }
+        });
+    }
+
+    // Cleanup timers on unload
+    window.addEventListener('beforeunload', function() {
+        if (pollInterval) clearInterval(pollInterval);
     });
+});
 </script>
-@endif
 @endpush
 @endsection

@@ -164,7 +164,7 @@ $pharmacyPortalRoutes = function () {
     // Pharmacy Messaging
     Route::get('/messages', [\App\Http\Controllers\MessageController::class, 'pharmacyIndex'])->name('messages.index');
     Route::get('/messages/{id}', [\App\Http\Controllers\MessageController::class, 'pharmacyShow'])->name('messages');
-    Route::post('/messages/{id}/send', [\App\Http\Controllers\MessageController::class, 'sendMessage'])->name('messages.send');
+    Route::post('/messages/{id}/send', [\App\Http\Controllers\MessageController::class, 'sendMessage'])->middleware('throttle:30,1')->name('messages.send');
     Route::post('/messages/{id}/read', [\App\Http\Controllers\MessageController::class, 'markRead'])->name('messages.read');
 };
 
@@ -218,7 +218,7 @@ Route::middleware(['auth:web', 'role:customer'])->group(function () {
     Route::get('/messages', [\App\Http\Controllers\MessageController::class, 'index'])->name('messages.index');
     Route::get('/messages/{id}', [\App\Http\Controllers\MessageController::class, 'show'])->name('messages.show');
     Route::post('/messages', [\App\Http\Controllers\MessageController::class, 'store'])->name('messages.store');
-    Route::post('/messages/{id}/send', [\App\Http\Controllers\MessageController::class, 'sendMessage'])->name('messages.send');
+    Route::post('/messages/{id}/send', [\App\Http\Controllers\MessageController::class, 'sendMessage'])->middleware('throttle:30,1')->name('messages.send');
     Route::post('/messages/{id}/read', [\App\Http\Controllers\MessageController::class, 'markRead'])->name('messages.read');
     Route::get('/ajax/messages/unread', [\App\Http\Controllers\MessageController::class, 'unreadCount'])->name('api.messages.unread');
 });

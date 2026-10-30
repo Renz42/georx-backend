@@ -79,16 +79,47 @@ class Conversation extends Model
     }
 
     /**
-     * Get or create a conversation between a user and pharmacy
+     * Get or create a conversation between a user and pharmacy.
+     * Concurrency-safe against race conditions and database uniqueness constraints.
      */
     public static function findOrStart(int $userId, int $pharmacyId, ?int $orderId = null): self
     {
-        return static::firstOrCreate(
-            [
+        $findQuery = function () use ($userId, $pharmacyId, $orderId) {
+            $q = static::where('user_id', $userId)
+                ->where('pharmacy_id', $pharmacyId);
+
+            if ($orderId === null) {
+                $q->whereNull('order_id');
+            } else {
+                $q->where('order_id', $orderId);
+            }
+
+            return $q->first();
+        };
+
+        // 1. Fast read without write lock
+        $existing = $findQuery();
+        if ($existing) {
+            return $existing;
+        }
+
+        // 2. Concurrency-safe insert with fallback on duplicate race
+        try {
+            return static::create([
                 'user_id' => $userId,
                 'pharmacy_id' => $pharmacyId,
                 'order_id' => $orderId,
-            ]
-        );
+                'last_message_at' => now(),
+            ]);
+        } catch (\Illuminate\Database\QueryException $e) {
+            // Concurrent race condition caught by database unique index
+            $raceExisting = $findQuery();
+            if ($raceExisting) {
+                return $raceExisting;
+            }
+
+            throw $e;
+        }
     }
 }
+

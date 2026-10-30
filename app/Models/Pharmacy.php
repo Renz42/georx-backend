@@ -57,6 +57,14 @@ class Pharmacy extends Model
     }
 
     /**
+     * Check if pharmacy is approved and actively operating for inquiries.
+     */
+    public function isEligibleForInquiries(): bool
+    {
+        return $this->status === 'approved' && (bool)$this->is_active;
+    }
+
+    /**
      * Compute the effective open/closed/offline status.
      *
      * Combines the manual is_active toggle with operating_hours
@@ -67,22 +75,39 @@ class Pharmacy extends Model
      */
     public function getIsCurrentlyOpenAttribute(): string
     {
-        // Manual override takes priority
-        if (!$this->is_active) {
+        // 1. Inactive or unapproved pharmacies are strictly offline
+        if (!$this->is_active || $this->status !== 'approved') {
             return 'offline';
         }
 
-        // If operating hours are configured, check the current time
-        if (is_array($this->operating_hours)
-            && isset($this->operating_hours['open'])
-            && isset($this->operating_hours['close'])) {
-            try {
-                $tz        = config('app.timezone') && config('app.timezone') !== 'UTC' ? config('app.timezone') : 'Asia/Manila';
-                $now       = now($tz)->format('H:i');
-                $openTime  = \Carbon\Carbon::parse($this->operating_hours['open'])->format('H:i');
-                $closeTime = \Carbon\Carbon::parse($this->operating_hours['close'])->format('H:i');
+        // 2. Extract open and close strings from array, json string, or formatted string
+        $openStr = null;
+        $closeStr = null;
 
-                // Standard daytime schedule (e.g. 08:00 to 21:00)
+        if (is_array($this->operating_hours)) {
+            $openStr = $this->operating_hours['open'] ?? null;
+            $closeStr = $this->operating_hours['close'] ?? null;
+        } elseif (is_string($this->operating_hours) && trim($this->operating_hours) !== '') {
+            $raw = trim($this->operating_hours);
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded) && isset($decoded['open'], $decoded['close'])) {
+                $openStr = $decoded['open'];
+                $closeStr = $decoded['close'];
+            } elseif (preg_match('/^(.+?)\s*(?:-|to)\s*(.+)$/i', $raw, $matches)) {
+                $openStr = trim($matches[1]);
+                $closeStr = trim($matches[2]);
+            }
+        }
+
+        // 3. If operating hours are configured, evaluate against Asia/Manila current time
+        if ($openStr && $closeStr) {
+            try {
+                $tz = 'Asia/Manila';
+                $now = now($tz)->format('H:i');
+                $openTime = \Carbon\Carbon::parse($openStr, $tz)->format('H:i');
+                $closeTime = \Carbon\Carbon::parse($closeStr, $tz)->format('H:i');
+
+                // Standard daytime schedule (e.g. 08:00 to 20:00)
                 if ($openTime <= $closeTime) {
                     if ($now >= $openTime && $now <= $closeTime) {
                         return 'online';
@@ -95,14 +120,14 @@ class Pharmacy extends Model
                 }
 
                 return 'closed';
-            } catch (\Exception $e) {
-                // If parsing fails, fall back to online (is_active is true)
-                return 'online';
+            } catch (\Throwable $e) {
+                // Malformed schedule data fails safely to closed
+                return 'closed';
             }
         }
 
-        // No operating hours configured – rely on is_active only
-        return 'online';
+        // Missing or unparseable hours fail safely to closed
+        return 'closed';
     }
 
     /**
