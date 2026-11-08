@@ -36,6 +36,7 @@ class EmailOtpMailable extends Mailable
         $subject = match ($this->purpose) {
             'registration' => 'GEORX — Verify Your Patient Account',
             'login_verification' => 'GEORX — Security Verification Code',
+            'password_reset' => 'GEORX — Password Reset Verification Code',
             default => 'GEORX — Verification Code',
         };
 

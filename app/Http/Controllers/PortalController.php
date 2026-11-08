@@ -17,7 +17,8 @@ class PortalController extends Controller
     // Get current pharmacy (scoped to logged-in admin)
     private function getMyPharmacy()
     {
-        return Auth::user()->pharmacy;
+        $user = Auth::guard('pharmacy')->user() ?? Auth::user() ?? request()->user();
+        return $user?->pharmacy;
     }
 
     // Dashboard
@@ -477,8 +478,13 @@ class PortalController extends Controller
         // Handle Image Upload if provided during new medicine creation
         $imagePath = null;
         if ($request->hasFile('image')) {
-            $storageService = app(\App\Services\SupabaseStorageService::class);
-            $imagePath = $storageService->upload($request->file('image'), \App\Services\SupabaseStorageService::BUCKET_MEDICINE_IMAGES);
+            try {
+                $storageService = app(\App\Services\SupabaseStorageService::class);
+                $imagePath = $storageService->upload($request->file('image'), \App\Services\SupabaseStorageService::BUCKET_MEDICINE_IMAGES);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error("New medicine image upload failed: " . $e->getMessage());
+                return back()->withErrors(['image' => 'The medicine photo could not be uploaded. Please try again.'])->withInput();
+            }
         }
 
         try {
@@ -531,6 +537,14 @@ class PortalController extends Controller
                 ]);
             });
         } catch (\Throwable $e) {
+            if (!empty($imagePath)) {
+                try {
+                    $storageService = app(\App\Services\SupabaseStorageService::class);
+                    $storageService->delete(\App\Services\SupabaseStorageService::BUCKET_MEDICINE_IMAGES, $imagePath);
+                } catch (\Throwable $cleanupEx) {
+                    \Illuminate\Support\Facades\Log::error("Failed to clean up newly uploaded medicine image after DB creation failure: " . $cleanupEx->getMessage());
+                }
+            }
             \Illuminate\Support\Facades\Log::error('Create new medicine failed: ' . $e->getMessage(), [
                 'pharmacy_id' => $pharmacy->id,
                 'exception' => $e,
@@ -686,23 +700,133 @@ class PortalController extends Controller
         ]);
 
         $medicine = \App\Models\Medicine::findOrFail($id);
+        $oldImage = $medicine->image;
+        $newUploadedPath = null;
+        $storageService = app(\App\Services\SupabaseStorageService::class);
         
-        // If the admin uploaded a new image, save it securely via Supabase Storage
+        // Step 1 & 2: Upload replacement object and validate storage path
         if ($request->hasFile('image')) {
-            $storageService = app(\App\Services\SupabaseStorageService::class);
-            if ($medicine->image) {
-                $storageService->delete(\App\Services\SupabaseStorageService::BUCKET_MEDICINE_IMAGES, $medicine->image);
+            try {
+                $newUploadedPath = $storageService->upload(
+                    $request->file('image'),
+                    \App\Services\SupabaseStorageService::BUCKET_MEDICINE_IMAGES
+                );
+
+                if (empty($newUploadedPath) || !is_string($newUploadedPath)) {
+                    throw new \RuntimeException("Cloud storage upload returned an empty or invalid path.");
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error("Medicine catalog image upload failed: " . $e->getMessage(), [
+                    'medicine_id' => $id,
+                ]);
+                // Upload failed: Old database reference and old object remain intact; generic error returned
+                return back()->withErrors(['image' => 'The medicine photo could not be uploaded. Please try again.'])->withInput();
             }
-            $path = $storageService->upload($request->file('image'), \App\Services\SupabaseStorageService::BUCKET_MEDICINE_IMAGES);
-            $medicine->image = $path;
         }
 
-        // Update description
+        // Prepare database attributes
         if ($request->has('description')) {
             $medicine->description = $request->description;
         }
+
+        if ($newUploadedPath !== null) {
+            $medicine->image = $newUploadedPath;
+        }
         
-        $medicine->save();
+        // Step 3: Save the new database reference and verify positive success
+        $saveSuccess = false;
+        try {
+            $saveSuccess = $medicine->save();
+            if ($saveSuccess !== true) {
+                \Illuminate\Support\Facades\Log::error("Medicine catalog model save returned false", [
+                    'medicine_id' => $id,
+                    'new_image'   => $newUploadedPath,
+                    'old_image'   => $oldImage,
+                ]);
+            }
+        } catch (\Throwable $dbException) {
+            \Illuminate\Support\Facades\Log::error("Failed to save medicine catalog record: " . $dbException->getMessage(), [
+                'medicine_id' => $id,
+                'new_image'   => $newUploadedPath,
+                'old_image'   => $oldImage,
+            ]);
+            $saveSuccess = false;
+        }
+
+        // Treat both false return and thrown exceptions as save failures
+        if ($saveSuccess !== true) {
+            // Restore in-memory model attribute
+            $medicine->image = $oldImage;
+
+            // Database save failed: preserve old reference and attempt cleanup of newly uploaded object
+            if ($newUploadedPath !== null) {
+                try {
+                    $cleanupSuccess = $storageService->delete(
+                        \App\Services\SupabaseStorageService::BUCKET_MEDICINE_IMAGES,
+                        $newUploadedPath
+                    );
+                    if (!$cleanupSuccess) {
+                        \Illuminate\Support\Facades\Log::error("Storage service returned false while cleaning up orphaned object after DB save failure [{$newUploadedPath}].");
+                    }
+                } catch (\Throwable $cleanupEx) {
+                    // Safe logging of cleanup failure without overwriting the original DB save failure
+                    \Illuminate\Support\Facades\Log::error("Failed to clean up newly uploaded medicine image after DB save failure [{$newUploadedPath}]: " . $cleanupEx->getMessage());
+                }
+            }
+
+            return back()->withErrors(['error' => 'The catalog could not be updated. Your previous image has been preserved.'])->withInput();
+        }
+
+        // Step 4: Only then attempt deletion of the old object (after DB save has positively succeeded)
+        $oldImageDeleted = true;
+        if ($newUploadedPath !== null && !empty($oldImage) && $oldImage !== $newUploadedPath) {
+            $bucket = \App\Services\SupabaseStorageService::BUCKET_MEDICINE_IMAGES;
+            $oldCanonical = \App\Services\SupabaseStorageService::extractObjectKey($bucket, $oldImage);
+            $newCanonical = \App\Services\SupabaseStorageService::extractObjectKey($bucket, $newUploadedPath);
+
+            // Compare references using canonical object identity
+            if ($oldCanonical === null) {
+                // Not a managed Supabase Storage object in this bucket (e.g. external URL or local legacy)
+                \Illuminate\Support\Facades\Log::info("Skipping cloud deletion: Old image reference is not a managed object in bucket '{$bucket}' [{$oldImage}].");
+            } elseif ($newCanonical !== null && $oldCanonical === $newCanonical) {
+                // Replacement object resolves to the exact same storage key
+                \Illuminate\Support\Facades\Log::info("Skipping deletion: Replacement image shares identical storage key [{$oldCanonical}].");
+            } else {
+                // Shared reference safety check across all supported formats:
+                // Check if any other medicine record resolves to the same canonical object key
+                $otherMedicines = \App\Models\Medicine::where('id', '!=', $medicine->id)
+                    ->whereNotNull('image')
+                    ->where('image', '!=', '')
+                    ->get(['id', 'image']);
+
+                $isShared = false;
+                foreach ($otherMedicines as $other) {
+                    $otherCanonical = \App\Services\SupabaseStorageService::extractObjectKey($bucket, $other->image);
+                    if ($otherCanonical !== null && $otherCanonical === $oldCanonical) {
+                        $isShared = true;
+                        \Illuminate\Support\Facades\Log::info("Preserving shared storage object [{$oldCanonical}]: Referenced by medicine ID {$other->id}.");
+                        break;
+                    }
+                }
+
+                if (!$isShared) {
+                    try {
+                        $oldImageDeleted = $storageService->delete($bucket, $oldImage);
+                        if (!$oldImageDeleted) {
+                            \Illuminate\Support\Facades\Log::warning("Could not delete previous medicine photo [{$oldImage}]: Storage returned failure.");
+                        }
+                    } catch (\Throwable $delEx) {
+                        $oldImageDeleted = false;
+                        \Illuminate\Support\Facades\Log::warning("Could not delete previous medicine photo [{$oldImage}]: " . $delEx->getMessage());
+                    }
+                }
+            }
+        }
+
+        if (!$oldImageDeleted) {
+            return back()->with('success', $medicine->generic_name . ' catalog details updated successfully.')
+                         ->with('warning', 'The catalog was updated, but the previous image could not be removed. Please contact the administrator if the issue persists.');
+        }
 
         return back()->with('success', $medicine->generic_name . ' catalog details updated successfully!');
     }
@@ -972,6 +1096,14 @@ class PortalController extends Controller
             ->with('user')
             ->firstOrFail();
 
+        if (!$order->pharmacy_confirmed) {
+            return back()->with('error', "Order #{$order->id} must be confirmed by the pharmacy before booking delivery.");
+        }
+
+        if (in_array($order->status, [\App\Models\Order::STATUS_CANCELLED, \App\Models\Order::STATUS_REJECTED], true)) {
+            return back()->with('error', "Cannot book delivery for a cancelled or rejected order.");
+        }
+
         $validated = $request->validate([
             'delivery_provider'    => 'required|string|in:grab,maxim',
             'delivery_booking_id'  => 'required|string|max:100',
@@ -1005,7 +1137,7 @@ class PortalController extends Controller
             'fas fa-shipping-fast text-emerald-500'
         ));
 
-        return back()->with('success', "Order #{$order->id} successfully dispatched via {$providerLabel}! Booking Reference: {$validated['delivery_booking_id']}");
+        return back()->with('success', "Order #{$order->id} successfully booked via {$providerLabel}! Booking Reference: {$validated['delivery_booking_id']}");
     }
 
     /**
@@ -1019,6 +1151,21 @@ class PortalController extends Controller
             ->with('user')
             ->firstOrFail();
 
+        // 1. Order confirmation check
+        if (!$order->pharmacy_confirmed) {
+            return back()->with('error', "Order #{$order->id} must be confirmed by the pharmacy before updating delivery status.");
+        }
+
+        // 2. Terminal state check
+        if (in_array($order->status, [\App\Models\Order::STATUS_CANCELLED, \App\Models\Order::STATUS_REJECTED], true)) {
+            return back()->with('error', "Order #{$order->id} is cancelled or rejected.");
+        }
+
+        // 3. Ensure external courier was booked
+        if (empty($order->delivery_provider) && empty($order->delivery_booking_id)) {
+            return back()->with('error', "Cannot update delivery status: external courier has not been booked yet.");
+        }
+
         $validated = $request->validate([
             'status' => 'required|in:in_transit,delivered'
         ]);
@@ -1026,35 +1173,60 @@ class PortalController extends Controller
         $providerLabel = $order->delivery_provider === 'grab' ? 'Grab Express' : ($order->delivery_provider === 'maxim' ? 'Maxim' : 'Courier');
 
         if ($validated['status'] === 'in_transit') {
+            if ($order->status === \App\Models\Order::STATUS_DELIVERED || $order->delivery_status === 'delivered') {
+                return back()->with('error', "Order #{$order->id} has already been delivered.");
+            }
+
+            if ($order->delivery_status === 'in_transit' && $order->status === \App\Models\Order::STATUS_PICKED_UP) {
+                return back()->with('info', "Order #{$order->id} is already in transit.");
+            }
+
             $order->update([
                 'delivery_status' => 'in_transit',
                 'status'          => \App\Models\Order::STATUS_PICKED_UP,
-                'picked_up_at'    => now(),
+                'picked_up_at'    => $order->picked_up_at ?? now(),
             ]);
 
-            $order->user->notify(new \App\Notifications\OrderStatusChanged(
-                $order,
-                "Your package was picked up by the {$providerLabel} rider and is on the way!",
-                'fas fa-motorcycle text-indigo-500'
-            ));
+            try {
+                $order->user?->notify(new \App\Notifications\OrderStatusChanged(
+                    $order,
+                    "Your package was picked up by the {$providerLabel} rider and is on the way!",
+                    'fas fa-motorcycle text-indigo-500'
+                ));
+            } catch (\Throwable $e) {}
 
             return back()->with('success', "Order #{$order->id} status updated: In Transit with {$providerLabel}.");
         }
 
         if ($validated['status'] === 'delivered') {
+            // Enforce prior dispatch evidence: cannot mark delivered if never picked up or in transit!
+            $isDispatched = ($order->delivery_status === 'in_transit')
+                || ($order->status === \App\Models\Order::STATUS_PICKED_UP)
+                || !empty($order->picked_up_at);
+
+            if (!$isDispatched) {
+                return back()->with('error', "Cannot mark Order #{$order->id} as delivered before courier pickup / in-transit dispatch.");
+            }
+
+            if ($order->status === \App\Models\Order::STATUS_DELIVERED || $order->delivery_status === 'delivered') {
+                return back()->with('info', "Order #{$order->id} is already marked as delivered.");
+            }
+
             $order->update([
                 'delivery_status' => 'delivered',
                 'status'          => \App\Models\Order::STATUS_DELIVERED,
-                'delivered_at'    => now(),
+                'delivered_at'    => $order->delivered_at ?? now(),
             ]);
 
-            $order->user->notify(new \App\Notifications\OrderStatusChanged(
-                $order,
-                "Your package has been delivered by {$providerLabel}! Please confirm receipt and share your review.",
-                'fas fa-check-circle text-emerald-500'
-            ));
+            try {
+                $order->user?->notify(new \App\Notifications\OrderStatusChanged(
+                    $order,
+                    "Your package has been delivered by {$providerLabel}! Please confirm receipt and share your review.",
+                    'fas fa-check-circle text-emerald-500'
+                ));
 
-            $order->user?->notify(new \App\Notifications\ReviewPrompt($order));
+                $order->user?->notify(new \App\Notifications\ReviewPrompt($order));
+            } catch (\Throwable $e) {}
 
             return back()->with('success', "Order #{$order->id} marked as delivered by {$providerLabel}.");
         }

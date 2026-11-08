@@ -13,7 +13,26 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->trustProxies(at: '*');
+        $configuredProxies = env('TRUSTED_PROXIES');
+        $trustedProxyList = ($configuredProxies !== null && trim((string) $configuredProxies) !== '')
+            ? array_values(array_filter(array_map('trim', explode(',', (string) $configuredProxies))))
+            : [
+                '10.0.0.0/8',
+                '172.16.0.0/12',
+                '192.168.0.0/16',
+                '100.64.0.0/10',
+                'fc00::/7',
+                'fe80::/10',
+            ];
+
+        $middleware->trustProxies(
+            at: $trustedProxyList,
+            headers: \Illuminate\Http\Request::HEADER_X_FORWARDED_FOR |
+                \Illuminate\Http\Request::HEADER_X_FORWARDED_HOST |
+                \Illuminate\Http\Request::HEADER_X_FORWARDED_PORT |
+                \Illuminate\Http\Request::HEADER_X_FORWARDED_PROTO |
+                \Illuminate\Http\Request::HEADER_X_FORWARDED_AWS_ELB
+        );
         $middleware->alias([
             'role' => \App\Http\Middleware\RoleMiddleware::class,
             'alijis.geofence' => \App\Http\Middleware\EnsureWithinAlijis::class,

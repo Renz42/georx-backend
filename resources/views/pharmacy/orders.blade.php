@@ -308,13 +308,15 @@
                                         </form>
                                     @endif
 
-                                    <form action="{{ route('pharmacy.orders.delivery-status', $order->id) }}" method="POST" onsubmit="return confirm('Confirm that this package has been successfully delivered to the customer?');">
-                                        @csrf
-                                        <input type="hidden" name="status" value="delivered">
-                                        <button type="submit" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-md transition flex items-center gap-1.5">
-                                            <i class="fas fa-check-double"></i> Mark Delivered
-                                        </button>
-                                    </form>
+                                    @if($order->delivery_status === 'in_transit' || $order->status === 'picked_up')
+                                        <form action="{{ route('pharmacy.orders.delivery-status', $order->id) }}" method="POST" onsubmit="return confirm('Confirm that this package has been successfully delivered to the customer?');">
+                                            @csrf
+                                            <input type="hidden" name="status" value="delivered">
+                                            <button type="submit" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-md transition flex items-center gap-1.5">
+                                                <i class="fas fa-check-double"></i> Mark Delivered
+                                            </button>
+                                        </form>
+                                    @endif
                                 </div>
                             @endif
                         </div>

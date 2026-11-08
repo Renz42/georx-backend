@@ -36,7 +36,19 @@ return new class extends Migration
         // PostgreSQL / Supabase RLS Enforcement & Privilege Hardening (Always enforced idempotently)
         if (\Illuminate\Support\Facades\DB::getDriverName() === 'pgsql') {
             \Illuminate\Support\Facades\DB::statement('ALTER TABLE public.email_otp_challenges ENABLE ROW LEVEL SECURITY;');
-            \Illuminate\Support\Facades\DB::statement('REVOKE ALL ON public.email_otp_challenges FROM anon, authenticated, public;');
+            \Illuminate\Support\Facades\DB::statement('REVOKE ALL ON public.email_otp_challenges FROM PUBLIC;');
+            \Illuminate\Support\Facades\DB::statement("
+                DO $$
+                BEGIN
+                    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+                        EXECUTE format('REVOKE ALL ON public.email_otp_challenges FROM %I', 'anon');
+                    END IF;
+
+                    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+                        EXECUTE format('REVOKE ALL ON public.email_otp_challenges FROM %I', 'authenticated');
+                    END IF;
+                END $$;
+            ");
         }
     }
 

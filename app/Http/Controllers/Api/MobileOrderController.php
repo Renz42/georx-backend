@@ -305,60 +305,143 @@ class MobileOrderController extends Controller
     public function confirmDelivery(Request $request, $id): JsonResponse
     {
         $user = $request->user();
-        $order = Order::where('id', $id)->where('user_id', $user->id)->with('delivery')->firstOrFail();
 
-        // Cancelled / rejected orders can never be confirmed as delivered.
-        if (in_array($order->status, [Order::STATUS_CANCELLED, Order::STATUS_REJECTED], true)) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'This order was cancelled or rejected and cannot be confirmed as delivered.',
-            ], 422);
-        }
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($user, $id) {
+            $order = Order::where('id', $id)
+                ->where('user_id', $user->id)
+                ->with('delivery')
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        $now = now();
+            // 1. Cancelled / rejected orders can never be confirmed as delivered.
+            if (in_array($order->status, [Order::STATUS_CANCELLED, Order::STATUS_REJECTED], true)) {
+                return response()->json([
+                    'status' => 'error',
+                    'code' => 'ORDER_TERMINAL',
+                    'message' => 'This order was cancelled or rejected and cannot be confirmed as delivered.',
+                ], 422);
+            }
 
-        // Idempotency: a repeated confirm must not re-notify the patient/pharmacy.
-        $alreadyConfirmed = (bool)$order->customer_confirmed_delivery;
+            // 2. Pharmacy confirmation check: Order must be reviewed and accepted by pharmacy
+            if (!$order->pharmacy_confirmed) {
+                return response()->json([
+                    'status' => 'error',
+                    'code' => 'PHARMACY_NOT_CONFIRMED',
+                    'message' => 'This order has not been confirmed by the pharmacy yet.',
+                ], 422);
+            }
 
-        $order->status = Order::STATUS_DELIVERED;
-        $order->delivered_at = $order->delivered_at ?? $now;
-        $order->customer_confirmed_delivery = true;
-        $order->customer_confirmed_at = $order->customer_confirmed_at ?? $now;
-        if ($order->delivery_provider) {
-            // Keep external courier status in sync so tracking never reports a stale 'in_transit'.
-            $order->delivery_status = 'delivered';
-        }
-        $order->save();
+            // 3. Preparation check: newly placed or preparing orders cannot be confirmed
+            if ($order->status === Order::STATUS_PENDING_CONFIRMATION || $order->status === Order::STATUS_PENDING) {
+                return response()->json([
+                    'status' => 'error',
+                    'code' => 'ORDER_NOT_DISPATCHED',
+                    'message' => 'Your order is still being prepared by the pharmacy and has not been dispatched for delivery yet.',
+                ], 422);
+            }
 
-        if ($alreadyConfirmed) {
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Delivery was already confirmed. Thank you!',
-                'already_confirmed' => true,
-                'order' => [
-                    'id' => $order->id,
-                    'status' => $order->status,
-                    'status_label' => 'Delivered (Approved)',
-                    'delivery_status' => $order->delivery_provider ? 'delivered' : ($order->delivery?->status ?? 'delivered'),
-                    'customer_confirmed_delivery' => true,
-                    'customer_confirmed_at' => $order->customer_confirmed_at ? $order->customer_confirmed_at->format('M d, Y g:i A') : $now->format('M d, Y g:i A'),
-                ],
-            ]);
-        }
+            $now = now();
+            $alreadyConfirmed = (bool)$order->customer_confirmed_delivery;
 
-        if ($order->delivery) {
-            $order->delivery->status = Delivery::STATUS_DELIVERED;
-            $order->delivery->delivered_at = $order->delivery->delivered_at ?? $now;
-            $order->delivery->save();
-
-            // Supabase Realtime broadcast
-            try {
-                \App\Services\SupabaseRealtimeService::broadcastDeliveryStatusChange($order->delivery, Delivery::STATUS_DELIVERED, [
-                    'customer_confirmed' => true,
-                    'timestamp' => $now->toIso8601String(),
+            // 4. Idempotency: a repeated confirm from the customer must not re-notify the patient/pharmacy or duplicate side effects.
+            if ($alreadyConfirmed) {
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Delivery was already confirmed. Thank you!',
+                    'already_confirmed' => true,
+                    'order' => [
+                        'id' => $order->id,
+                        'status' => $order->status,
+                        'status_label' => 'Delivered (Approved)',
+                        'delivery_status' => $order->delivery_provider ? 'delivered' : ($order->delivery?->status ?? 'delivered'),
+                        'customer_confirmed_delivery' => true,
+                        'customer_confirmed_at' => $order->customer_confirmed_at ? $order->customer_confirmed_at->format('M d, Y g:i A') : $now->format('M d, Y g:i A'),
+                    ],
                 ]);
-            } catch (\Throwable $e) {}
-        }
+            }
+
+            // 5. Verified dispatch / in-transit evidence check
+            $isDispatched = false;
+
+            if ($order->delivery_provider) {
+                // External courier (Grab Express / Maxim)
+                // A booking ID or 'booked' delivery status alone is NOT proof of dispatch.
+                $hasInTransitStatus = in_array($order->delivery_status, ['in_transit', 'out_for_delivery', 'delivered'], true);
+                $hasPickedUpStatus = in_array($order->status, [Order::STATUS_PICKED_UP, Order::STATUS_DELIVERED], true);
+                $hasPickupTimestamp = !empty($order->picked_up_at);
+
+                if ($hasInTransitStatus || $hasPickedUpStatus || $hasPickupTimestamp) {
+                    $isDispatched = true;
+                } else {
+                    return response()->json([
+                        'status' => 'error',
+                        'code' => 'COURIER_NOT_DISPATCHED',
+                        'message' => 'The courier has been booked, but your package has not been picked up for delivery yet.',
+                    ], 422);
+                }
+            } elseif ($order->delivery || $order->delivery_partner_id) {
+                // Internal driver / legacy delivery
+                // Driver assigned or at_pharmacy alone is NOT proof of dispatch.
+                $delStatus = $order->delivery?->status;
+                $hasDelDispatched = in_array($delStatus, [Delivery::STATUS_PICKED_UP, Delivery::STATUS_OUT_FOR_DELIVERY, Delivery::STATUS_DELIVERED], true);
+                $hasOrderDispatched = in_array($order->status, [Order::STATUS_PICKED_UP, Order::STATUS_DELIVERED], true);
+
+                if ($hasDelDispatched || $hasOrderDispatched || !empty($order->picked_up_at)) {
+                    $isDispatched = true;
+                } else {
+                    return response()->json([
+                        'status' => 'error',
+                        'code' => 'DRIVER_NOT_DISPATCHED',
+                        'message' => 'The delivery driver has not picked up your order from the pharmacy yet.',
+                    ], 422);
+                }
+            } else {
+                // Standard fallback
+                if (in_array($order->status, [Order::STATUS_PICKED_UP, Order::STATUS_DELIVERED], true) || !empty($order->picked_up_at)) {
+                    $isDispatched = true;
+                } else {
+                    return response()->json([
+                        'status' => 'error',
+                        'code' => 'ORDER_NOT_DISPATCHED',
+                        'message' => 'This order has not been dispatched for delivery yet.',
+                    ], 422);
+                }
+            }
+
+            if (!$isDispatched) {
+                return response()->json([
+                    'status' => 'error',
+                    'code' => 'ORDER_NOT_DISPATCHED',
+                    'message' => 'This order has not been dispatched for delivery yet.',
+                ], 422);
+            }
+
+            $order->status = Order::STATUS_DELIVERED;
+            $order->delivered_at = $order->delivered_at ?? $now;
+            $order->customer_confirmed_delivery = true;
+            $order->customer_confirmed_at = $order->customer_confirmed_at ?? $now;
+            if ($order->delivery_provider) {
+                // Keep external courier status in sync so tracking never reports a stale 'in_transit'.
+                $order->delivery_status = 'delivered';
+            }
+            $order->save();
+
+            if ($order->delivery || $order->delivery_partner_id) {
+                $delivery = Delivery::where('order_id', $order->id)->lockForUpdate()->first();
+                if ($delivery) {
+                    $delivery->status = Delivery::STATUS_DELIVERED;
+                    $delivery->delivered_at = $delivery->delivered_at ?? $now;
+                    $delivery->save();
+
+                    // Supabase Realtime broadcast
+                    try {
+                        \App\Services\SupabaseRealtimeService::broadcastDeliveryStatusChange($delivery, Delivery::STATUS_DELIVERED, [
+                            'customer_confirmed' => true,
+                            'timestamp' => $now->toIso8601String(),
+                        ]);
+                    } catch (\Throwable $e) {}
+                }
+            }
 
         // Trigger Notifications (Customer Review Prompt & Pharmacy Admin Alert)
         try {
@@ -386,5 +469,6 @@ class MobileOrderController extends Controller
                 'customer_confirmed_at' => $order->customer_confirmed_at ? $order->customer_confirmed_at->format('M d, Y g:i A') : $now->format('M d, Y g:i A'),
             ],
         ]);
+        });
     }
 }

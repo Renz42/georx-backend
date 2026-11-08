@@ -16,10 +16,17 @@ class EmailOtpChallenge extends Model
         'email',
         'purpose',
         'otp_hash',
+        'active_hashes',
+        'pending_otp_hash',
+        'previous_otp_hash',
         'challenge_token_hash',
         'attempts',
         'max_attempts',
         'send_count',
+        'resend_reservation_token',
+        'resend_reserved_until',
+        'delivery_state',
+        'otp_version',
         'last_sent_at',
         'expires_at',
         'consumed_at',
@@ -28,13 +35,23 @@ class EmailOtpChallenge extends Model
     protected function casts(): array
     {
         return [
+            'active_hashes' => 'array',
             'attempts' => 'integer',
             'max_attempts' => 'integer',
             'send_count' => 'integer',
+            'otp_version' => 'integer',
+            'resend_reserved_until' => 'datetime',
             'last_sent_at' => 'datetime',
             'expires_at' => 'datetime',
             'consumed_at' => 'datetime',
         ];
+    }
+
+    public function hasActiveResendReservation(): bool
+    {
+        return ($this->delivery_state ?? 'delivered') === 'reserved'
+            && $this->resend_reserved_until !== null
+            && $this->resend_reserved_until->isFuture();
     }
 
     public function user()

@@ -204,7 +204,7 @@
 
                     <!-- Footer Secondary Action Link: Forgot Password? (No public registration link) -->
                     <div class="text-center pt-3">
-                        <a href="mailto:support@georx.com?subject=GEORX%20System%20Admin%20Password%20Reset%20Request"
+                        <a href="{{ route('admin.password.request') }}"
                            class="text-xs sm:text-sm font-medium text-[#64748B] hover:text-[#2F7E6A] hover:underline transition-colors">
                             Forgot Password?
                         </a>

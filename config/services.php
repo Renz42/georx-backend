@@ -44,7 +44,11 @@ return [
 
     'supabase' => [
         'url' => env('SUPABASE_URL'),
-        'key' => env('SUPABASE_SERVICE_KEY', env('SUPABASE_ANON_KEY')),
+        'secret_key' => env('SUPABASE_SECRET_KEY'),
+        'service_role_key' => env('SUPABASE_SERVICE_ROLE_KEY', env('SUPABASE_SERVICE_KEY')),
+        'key' => env('SUPABASE_KEY'),
+        'anon_key' => env('SUPABASE_ANON_KEY'),
+        'publishable_key' => env('SUPABASE_PUBLISHABLE_KEY'),
     ],
 
 ];

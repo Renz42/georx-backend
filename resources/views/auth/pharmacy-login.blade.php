@@ -209,7 +209,7 @@
                             Register Here
                         </a>
                         <span class="text-slate-300 font-normal">|</span>
-                        <a href="mailto:support@georx.com?subject=GEORX%20Pharmacy%20Portal%20Password%20Reset%20Request"
+                        <a href="{{ route('pharmacy.password.request') }}"
                            class="text-[#64748B] hover:text-[#2F7E6A] hover:underline transition-colors">
                             Forgot Password?
                         </a>

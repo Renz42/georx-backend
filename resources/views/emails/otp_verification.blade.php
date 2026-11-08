@@ -109,6 +109,8 @@
             <div class="description">
                 @if($purpose === 'registration')
                     Thank you for registering with GEORX. To verify your email address and activate your patient account, please enter the six-digit code below:
+                @elseif($purpose === 'password_reset')
+                    We received a request to reset the password for your GEORX account. Please enter the six-digit verification code below to complete your password reset:
                 @else
                     We received a request to verify your GEORX account. Please use the six-digit security code below to proceed:
                 @endif
@@ -121,6 +123,9 @@
 
             <div class="security-notice">
                 <strong>Security Notice:</strong> This code will expire in {{ $expiresInMinutes }} minutes. Never share this code with anyone. GEORX staff will never ask for your verification code.
+                @if($purpose === 'password_reset')
+                    <br><br>If you did not request a password reset, please ignore this email and ensure your account credentials remain secure.
+                @endif
             </div>
         </div>
         <div class="footer">

@@ -22,6 +22,14 @@ Route::middleware('throttle:10,1')->group(function () {
     Route::post('/auth/otp/resend', [AuthController::class, 'resendOtp']);
 });
 
+// Patient Mobile Password Recovery Routes (Dedicated layered HMAC rate limiters)
+Route::post('/auth/password/forgot', [AuthController::class, 'forgotPassword'])
+    ->middleware('throttle:patient_forgot');
+Route::post('/auth/password/resend', [AuthController::class, 'resendPasswordOtp'])
+    ->middleware('throttle:patient_resend');
+Route::post('/auth/password/reset', [AuthController::class, 'resetPassword'])
+    ->middleware('throttle:patient_reset');
+
 
 // Public Pharmacy Routes (Consolidated into one group)
 Route::prefix('pharmacies')->group(function () {
@@ -47,6 +55,9 @@ Route::post('/geofence/validate', function (Request $request) {
             : 'Location is outside the Barangay Alijis boundary radius.',
     ]);
 });
+
+// External Courier Delivery Webhook (Stateless API route, no session/CSRF middleware)
+Route::post('/delivery/webhook/{order}', [\App\Http\Controllers\DeliveryController::class, 'webhook'])->name('api.delivery.webhook');
 
 // Protected Mobile Routes (Requires Sanctum Bearer Token)
 Route::middleware('auth:sanctum')->group(function () {

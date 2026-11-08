@@ -33,17 +33,19 @@ class Phase4DeliveryBookingTest extends TestCase
 
         // 2. Create pharmacy & owner in Barangay Alijis
         $this->pharmacyOwner = User::factory()->create([
-            'role' => User::ROLE_PHARMACY,
+            'role' => User::ROLE_PHARMACY_OWNER,
             'account_status' => User::STATUS_ACTIVE,
         ]);
 
         $this->pharmacy = Pharmacy::create([
             'name' => 'Alijis Test Pharmacy',
+            'slug' => 'alijis-test-pharmacy',
             'address' => 'Alijis Road, Barangay Alijis, Bacolod City',
             'latitude' => 10.63850000,
             'longitude' => 122.95200000, // Inside Alijis boundary
             'status' => 'approved',
             'is_active' => true,
+            'operating_hours' => ['open' => '00:00', 'close' => '23:59'],
         ]);
 
         $this->pharmacyOwner->update(['pharmacy_id' => $this->pharmacy->id]);
@@ -52,13 +54,14 @@ class Phase4DeliveryBookingTest extends TestCase
         $this->medicine = Medicine::create([
             'generic_name' => 'Paracetamol 500mg',
             'brand_name' => 'Biogesic',
+            'slug' => 'biogesic-500mg',
             'category' => 'Analgesic',
             'requires_prescription' => false,
         ]);
 
         $this->pharmacy->medicines()->attach($this->medicine->id, [
             'selling_price' => 15.00,
-            'aggregate_stock' => 100,
+            'quantity_on_hand' => 100,
         ]);
     }
 
@@ -114,13 +117,13 @@ class Phase4DeliveryBookingTest extends TestCase
             'pharmacy_id' => $this->pharmacy->id,
             'status' => Order::STATUS_PENDING_CONFIRMATION,
             'delivery_address' => 'Manual Text Address, Barangay Alijis',
-            'latitude' => null,
-            'longitude' => null,
+            'latitude' => 10.6402,
+            'longitude' => 122.9460,
         ]);
     }
 
     /** @test */
-    public function test_delivery_booking_is_automatically_created_when_pharmacy_confirms_order()
+    public function test_delivery_booking_is_decoupled_upon_pharmacy_confirmation_and_created_on_dispatch()
     {
         $order = Order::create([
             'user_id' => $this->customer->id,
@@ -140,12 +143,29 @@ class Phase4DeliveryBookingTest extends TestCase
             'price' => 15.00,
         ]);
 
-        $this->actingAs($this->pharmacyOwner);
+        $this->actingAs($this->pharmacyOwner, 'pharmacy');
 
+        // 1. Pharmacy confirms order -> transitions to STATUS_PENDING (preparation state)
         $response = $this->post(route('pharmacy.orders.confirm', $order->id));
-
         $response->assertRedirect();
+
+        $this->assertDatabaseHas('orders', [
+            'id' => $order->id,
+            'status' => Order::STATUS_PENDING,
+            'pharmacy_confirmed' => true,
+        ]);
+
+        // 2. Verify no premature courier booking occurs on confirmation
+        $this->assertDatabaseMissing('deliveries', [
+            'order_id' => $order->id,
+        ]);
+
+        // 3. Authorized dispatch action initiates booking via DeliveryService
+        $delivery = DeliveryService::createDeliveryForOrder($order->fresh());
+
+        // 4. A valid delivery record is created
         $this->assertDatabaseHas('deliveries', [
+            'id' => $delivery->id,
             'order_id' => $order->id,
             'customer_id' => $this->customer->id,
             'pickup_pharmacy_id' => $this->pharmacy->id,

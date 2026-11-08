@@ -24,6 +24,14 @@ class OrderController extends Controller
 
         $pharmacy = $cartItems->first()->pharmacy;
         
+        if (!$pharmacy || $pharmacy->status !== 'approved' || !$pharmacy->is_active) {
+            return redirect()->route('cart.index')->with('error', 'This pharmacy is currently unavailable.');
+        }
+
+        if (!$pharmacy->is_open) {
+            return redirect()->route('cart.index')->with('error', "{$pharmacy->name} is currently closed. You can keep items in your cart and checkout once the pharmacy opens.");
+        }
+
         $subtotal = 0;
         foreach ($cartItems as $item) {
             $pivot = DB::table('pharmacy_medicine')
@@ -84,11 +92,27 @@ class OrderController extends Controller
             $pharmacy = Pharmacy::find($pharmacyId);
         }
 
-        if (!$pharmacy || $pharmacy->status !== 'approved') {
+        if (!$pharmacy || $pharmacy->status !== 'approved' || !$pharmacy->is_active) {
             if ($isApi) {
-                return response()->json(['status' => 'error', 'message' => 'This pharmacy is currently unavailable.'], 400);
+                return response()->json([
+                    'status' => 'error',
+                    'code' => 'PHARMACY_UNAVAILABLE',
+                    'message' => 'This pharmacy is currently unavailable or unapproved.'
+                ], 422);
             }
             return redirect()->route('cart.index')->with('error', 'This pharmacy is currently unavailable.');
+        }
+
+        if (!$pharmacy->is_open) {
+            $msg = "{$pharmacy->name} is currently closed. Orders can only be placed during operating hours.";
+            if ($isApi) {
+                return response()->json([
+                    'status' => 'error',
+                    'code' => 'PHARMACY_CLOSED',
+                    'message' => $msg,
+                ], 422);
+            }
+            return redirect()->route('cart.index')->with('error', $msg);
         }
 
         // 2. Geofence Validation for delivery address
@@ -221,6 +245,12 @@ class OrderController extends Controller
                     $request->filled('longitude') ? (float)$request->longitude : null
                 );
                 $totalAmount = round($subtotal + $deliveryFee, 2);
+
+                // Concurrency-safe freshness check immediately before order creation
+                $freshPharmacy = Pharmacy::find($pharmacy->id);
+                if (!$freshPharmacy || !$freshPharmacy->is_active || $freshPharmacy->status !== 'approved' || !$freshPharmacy->is_open) {
+                    throw new \InvalidArgumentException("{$pharmacy->name} is currently closed. Orders can only be placed during operating hours.");
+                }
 
                 $createdOrder = Order::create([
                     'user_id' => $userId,

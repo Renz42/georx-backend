@@ -19,6 +19,17 @@
             </div>
         @endif
 
+        @if($errors->any())
+            <div class="bg-rose-50 border border-rose-200 text-rose-800 px-5 py-3.5 rounded-2xl mb-8 flex items-center shadow-2xs font-bold text-xs sm:text-sm">
+                <i class="fas fa-exclamation-circle mr-3 text-rose-600 text-lg"></i>
+                <div class="flex-1">
+                    @foreach($errors->all() as $error)
+                        <p>{{ $error }}</p>
+                    @endforeach
+                </div>
+            </div>
+        @endif
+
         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             @forelse($medicines as $medicine)
                 <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden flex flex-col hover:shadow-sm transition-shadow">
@@ -27,8 +38,8 @@
                         @csrf
                         
                         <div class="h-48 bg-slate-50 border-b border-slate-100 relative group flex items-center justify-center">
-                            @if($medicine->image)
-                                <img src="{{ asset('storage/' . $medicine->image) }}" alt="Medicine" class="w-full h-full object-cover">
+                            @if($medicine->image_url)
+                                <img src="{{ $medicine->image_url }}" alt="{{ $medicine->generic_name ?? 'Medicine Photo' }}" class="w-full h-full object-cover">
                             @else
                                 <div class="text-center opacity-50 group-hover:opacity-100 transition-opacity">
                                     <i class="fas fa-camera text-3xl text-slate-400 mb-2 block"></i>

@@ -324,10 +324,10 @@ class AuthSecurityTest extends TestCase
     {
         $pharmacyView = $this->get(route('pharmacy.login'));
         $pharmacyView->assertSee(route('pharmacy.register'));
-        $pharmacyView->assertSee('mailto:support@georx.com?subject=GEORX%20Pharmacy%20Portal%20Password%20Reset%20Request');
+        $pharmacyView->assertSee(route('pharmacy.password.request'));
 
         $adminView = $this->get(route('admin.login'));
-        $adminView->assertSee('mailto:support@georx.com?subject=GEORX%20System%20Admin%20Password%20Reset%20Request');
+        $adminView->assertSee(route('admin.password.request'));
     }
 
     /** 14. Existing rate-limiting behavior remains enabled and effective */
@@ -358,5 +358,267 @@ class AuthSecurityTest extends TestCase
         $adminCompiled = view('auth.admin-login', ['errors' => $errors])->render();
         $this->assertNotEmpty($adminCompiled);
         $this->assertStringContainsString('System Administration', $adminCompiled);
+    }
+
+    /** 16. Phase 1.A: Legitimate registration and email_verification OTP challenges succeed on mobile OTP endpoints */
+    public function test_mobile_registration_and_email_verification_otp_succeed_and_issue_token(): void
+    {
+        \Illuminate\Support\Facades\Mail::fake();
+
+        // 16a. Registration flow (purpose = 'registration')
+        $regRes = $this->postJson('/api/register', [
+            'name'                  => 'New Patient',
+            'email'                 => 'newpatient@example.com',
+            'phone'                 => '09171234567',
+            'password'              => 'PatientPass123!',
+            'password_confirmation' => 'PatientPass123!',
+        ]);
+        $regRes->assertStatus(202)
+               ->assertJsonPath('status', 'verification_required');
+
+        $challengeToken = $regRes->json('challenge_token');
+        $this->assertNotEmpty($challengeToken);
+
+        $sentOtp = null;
+        \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\EmailOtpMailable::class, function ($mail) use (&$sentOtp) {
+            $sentOtp = $mail->otp;
+            return $mail->purpose === 'registration';
+        });
+        $this->assertNotNull($sentOtp);
+
+        // Resend after cooldown on legitimate registration challenge succeeds
+        $this->travel(61)->seconds();
+        $resendRes = $this->postJson('/api/auth/otp/resend', [
+            'challenge_token' => $challengeToken,
+        ]);
+        $resendRes->assertStatus(200)
+                  ->assertJsonPath('status', 'success');
+
+        \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\EmailOtpMailable::class, function ($mail) use (&$sentOtp) {
+            $sentOtp = $mail->otp;
+            return $mail->purpose === 'registration';
+        });
+
+        // Verify legitimate registration OTP activates account and issues Sanctum token
+        $verifyRes = $this->postJson('/api/auth/otp/verify', [
+            'challenge_token' => $challengeToken,
+            'otp'             => $sentOtp,
+        ]);
+        $verifyRes->assertStatus(200)
+                  ->assertJsonPath('status', 'success')
+                  ->assertJsonStructure(['token', 'user' => ['id', 'email', 'role']]);
+
+        $newUser = User::where('email', 'newpatient@example.com')->firstOrFail();
+        $this->assertEquals(User::STATUS_ACTIVE, $newUser->account_status);
+        $this->assertNotNull($newUser->email_verified_at);
+        $this->assertEquals(1, $newUser->tokens()->count());
+
+        // 16b. Unverified login flow (purpose = 'email_verification')
+        $unverifiedCustomer = User::create([
+            'name'              => 'Unverified Customer',
+            'email'             => 'unverified@example.com',
+            'password'          => bcrypt('CustomerPass123!'),
+            'role'              => User::ROLE_CUSTOMER,
+            'account_status'    => User::STATUS_PENDING_VERIFICATION,
+            'email_verified_at' => null,
+        ]);
+
+        $loginRes = $this->postJson('/api/login', [
+            'email'    => 'unverified@example.com',
+            'password' => 'CustomerPass123!',
+        ]);
+        $loginRes->assertStatus(202)
+                 ->assertJsonPath('status', 'verification_required');
+
+        $loginChallengeToken = $loginRes->json('challenge_token');
+        $loginOtp = null;
+        \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\EmailOtpMailable::class, function ($mail) use (&$loginOtp) {
+            if ($mail->purpose === 'email_verification') {
+                $loginOtp = $mail->otp;
+                return true;
+            }
+            return false;
+        });
+
+        $verifyLoginOtpRes = $this->postJson('/api/auth/otp/verify', [
+            'challenge_token' => $loginChallengeToken,
+            'otp'             => $loginOtp,
+        ]);
+        $verifyLoginOtpRes->assertStatus(200)
+                          ->assertJsonPath('status', 'success');
+
+        $unverifiedCustomer->refresh();
+        $this->assertEquals(User::STATUS_ACTIVE, $unverifiedCustomer->account_status);
+        $this->assertNotNull($unverifiedCustomer->email_verified_at);
+        $this->assertEquals(1, $unverifiedCustomer->tokens()->count());
+    }
+
+    /** 17. Phase 1.A: Password-reset OTP challenge is strictly rejected by /api/auth/otp/verify and never issues a Sanctum token or activates pending accounts */
+    public function test_password_reset_otp_cannot_verify_or_issue_sanctum_token_on_mobile_otp_endpoint(): void
+    {
+        \Illuminate\Support\Facades\Mail::fake();
+
+        $pendingCustomer = User::create([
+            'name'              => 'Pending Customer',
+            'email'             => 'pending_reset@example.com',
+            'password'          => bcrypt('OriginalPass123!'),
+            'role'              => User::ROLE_CUSTOMER,
+            'account_status'    => User::STATUS_PENDING_VERIFICATION,
+            'email_verified_at' => null,
+        ]);
+
+        $otpResult = \App\Services\EmailOtpService::createChallenge($pendingCustomer, 'password_reset');
+        $resetChallengeToken = $otpResult['challenge_token'];
+
+        $resetOtp = null;
+        \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\EmailOtpMailable::class, function ($mail) use (&$resetOtp) {
+            $resetOtp = $mail->otp;
+            return $mail->purpose === 'password_reset';
+        });
+        $this->assertNotNull($resetOtp);
+
+        // Attempt to submit password_reset challenge + valid OTP (even with forged client 'purpose' parameter) to /api/auth/otp/verify
+        $verifyRes = $this->postJson('/api/auth/otp/verify', [
+            'challenge_token' => $resetChallengeToken,
+            'otp'             => $resetOtp,
+            'purpose'         => 'registration',
+        ]);
+
+        $verifyRes->assertStatus(400)
+                  ->assertJsonPath('status', 'error')
+                  ->assertJsonPath('message', 'Verification purpose mismatch.')
+                  ->assertJsonMissingPath('token');
+
+        // Verify pending account was NOT activated and NO Sanctum token was minted
+        $pendingCustomer->refresh();
+        $this->assertEquals(User::STATUS_PENDING_VERIFICATION, $pendingCustomer->account_status);
+        $this->assertNull($pendingCustomer->email_verified_at);
+        $this->assertEquals(0, $pendingCustomer->tokens()->count());
+
+        // Verify password_reset challenge was NOT consumed or incremented by the rejected cross-purpose call
+        $challenge = \App\Models\EmailOtpChallenge::where(
+            'challenge_token_hash',
+            \App\Services\EmailOtpService::hashChallengeToken($resetChallengeToken)
+        )->firstOrFail();
+        $this->assertNull($challenge->consumed_at);
+        $this->assertEquals(0, $challenge->attempts);
+    }
+
+    /** 18. Phase 1.A: Password-reset OTP challenge cannot be resent or mutated through /api/auth/otp/resend */
+    public function test_password_reset_otp_cannot_be_resent_or_mutated_via_registration_resend_endpoint(): void
+    {
+        \Illuminate\Support\Facades\Mail::fake();
+
+        $otpResult = \App\Services\EmailOtpService::createChallenge($this->customerUser, 'password_reset');
+        $resetChallengeToken = $otpResult['challenge_token'];
+
+        // Clear initial creation mail so we can assert no resend mail is dispatched
+        \Illuminate\Support\Facades\Mail::fake();
+        $this->travel(65)->seconds();
+
+        $resendRes = $this->postJson('/api/auth/otp/resend', [
+            'challenge_token' => $resetChallengeToken,
+            'purpose'         => 'registration',
+        ]);
+
+        $resendRes->assertStatus(400)
+                  ->assertJsonPath('status', 'error')
+                  ->assertJsonPath('message', 'Verification purpose mismatch.');
+
+        \Illuminate\Support\Facades\Mail::assertNothingSent();
+
+        $challenge = \App\Models\EmailOtpChallenge::where(
+            'challenge_token_hash',
+            \App\Services\EmailOtpService::hashChallengeToken($resetChallengeToken)
+        )->firstOrFail();
+        $this->assertNull($challenge->consumed_at);
+        $this->assertEquals(1, $challenge->send_count);
+    }
+
+    /** 19. Phase 1.A: Registration and email_verification challenges are rejected when password_reset purpose is required */
+    public function test_registration_and_email_verification_otps_rejected_when_password_reset_purpose_required(): void
+    {
+        \Illuminate\Support\Facades\Mail::fake();
+
+        foreach (['registration', 'email_verification'] as $purpose) {
+            $otpResult = \App\Services\EmailOtpService::createChallenge($this->customerUser, $purpose);
+            $challengeToken = $otpResult['challenge_token'];
+
+            $code = null;
+            \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\EmailOtpMailable::class, function ($mail) use ($purpose, &$code) {
+                if ($mail->purpose === $purpose) {
+                    $code = $mail->otp;
+                    return true;
+                }
+                return false;
+            });
+
+            $executed = false;
+            $verifyExecResult = \App\Services\EmailOtpService::verifyAndExecute(
+                challengeToken: $challengeToken,
+                submittedOtp: $code,
+                expectedPurpose: \App\Services\EmailOtpService::PURPOSE_PASSWORD_RESET,
+                onVerified: function () use (&$executed): bool {
+                    $executed = true;
+                    return true;
+                }
+            );
+
+            $this->assertFalse($verifyExecResult['success']);
+            $this->assertEquals(400, $verifyExecResult['status']);
+            $this->assertEquals('Verification purpose mismatch.', $verifyExecResult['error']);
+            $this->assertFalse($executed);
+
+            $resendResult = \App\Services\EmailOtpService::resendOtp(
+                challengeToken: $challengeToken,
+                expectedPurpose: \App\Services\EmailOtpService::PURPOSE_PASSWORD_RESET
+            );
+            $this->assertFalse($resendResult['success']);
+            $this->assertEquals(400, $resendResult['status']);
+            $this->assertEquals('Verification purpose mismatch.', $resendResult['error']);
+        }
+    }
+
+    /** 20. Phase 1.A: Non-customer or suspended/rejected accounts cannot obtain a Sanctum token via /api/auth/otp/verify */
+    public function test_non_customer_or_suspended_user_challenge_cannot_issue_mobile_token_on_verify_otp(): void
+    {
+        \Illuminate\Support\Facades\Mail::fake();
+
+        $suspendedCustomer = User::create([
+            'name'              => 'Suspended Customer',
+            'email'             => 'suspended_cust@example.com',
+            'password'          => bcrypt('CustomerPass123!'),
+            'role'              => User::ROLE_CUSTOMER,
+            'account_status'    => User::STATUS_SUSPENDED,
+            'email_verified_at' => null,
+        ]);
+
+        foreach ([$this->adminUser, $this->pharmacyUser, $suspendedCustomer] as $ineligibleUser) {
+            $otpResult = \App\Services\EmailOtpService::createChallenge($ineligibleUser, 'registration');
+            $token = $otpResult['challenge_token'];
+
+            $code = null;
+            \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\EmailOtpMailable::class, function ($mail) use ($ineligibleUser, &$code) {
+                if ($mail->hasTo($ineligibleUser->email)) {
+                    $code = $mail->otp;
+                    return true;
+                }
+                return false;
+            });
+
+            $res = $this->postJson('/api/auth/otp/verify', [
+                'challenge_token' => $token,
+                'otp'             => $code,
+            ]);
+
+            $res->assertStatus(403)
+                ->assertJsonMissingPath('token');
+
+            $ineligibleUser->refresh();
+            $this->assertEquals(0, $ineligibleUser->tokens()->count());
+            if ($ineligibleUser->id === $suspendedCustomer->id) {
+                $this->assertEquals(User::STATUS_SUSPENDED, $ineligibleUser->account_status);
+            }
+        }
     }
 }

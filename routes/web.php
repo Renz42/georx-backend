@@ -50,10 +50,20 @@ Route::get('/pharmacy/{pharmacy_id}/medicine/{medicine_id}', [PharmacyController
     // 2. ADMIN PORTAL
     Route::get('/admin/login', [AuthController::class, 'showAdminLogin'])->name('admin.login');
     Route::post('/admin/login', [AuthController::class, 'loginAdmin'])->middleware('throttle:10,1');
+    Route::get('/admin/forgot-password', [AuthController::class, 'showAdminForgotPassword'])->name('admin.password.request');
+    Route::post('/admin/forgot-password', [AuthController::class, 'sendAdminResetOtp'])->middleware('throttle:admin_forgot')->name('admin.password.email');
+    Route::get('/admin/reset-password', [AuthController::class, 'showAdminResetPassword'])->name('admin.password.reset');
+    Route::post('/admin/reset-password', [AuthController::class, 'resetAdminPassword'])->middleware('throttle:admin_reset')->name('admin.password.update');
+    Route::post('/admin/reset-password/resend', [AuthController::class, 'resendAdminResetOtp'])->middleware('throttle:admin_resend')->name('admin.password.resend');
     
     // 3. PHARMACY PORTAL
     Route::get('/pharmacy/login', [AuthController::class, 'showPharmacyLogin'])->name('pharmacy.login');
     Route::post('/pharmacy/login', [AuthController::class, 'loginPharmacy'])->middleware('throttle:10,1');
+    Route::get('/pharmacy/forgot-password', [AuthController::class, 'showPharmacyForgotPassword'])->name('pharmacy.password.request');
+    Route::post('/pharmacy/forgot-password', [AuthController::class, 'sendPharmacyResetOtp'])->middleware('throttle:pharmacy_forgot')->name('pharmacy.password.email');
+    Route::get('/pharmacy/reset-password', [AuthController::class, 'showPharmacyResetPassword'])->name('pharmacy.password.reset');
+    Route::post('/pharmacy/reset-password', [AuthController::class, 'resetPharmacyPassword'])->middleware('throttle:pharmacy_reset')->name('pharmacy.password.update');
+    Route::post('/pharmacy/reset-password/resend', [AuthController::class, 'resendPharmacyResetOtp'])->middleware('throttle:pharmacy_resend')->name('pharmacy.password.resend');
     
     // Pharmacy Partner Registration
     Route::get('/pharmacy/register', [AuthController::class, 'showPharmacyRegister'])->name('pharmacy.register');
@@ -268,6 +278,3 @@ Route::prefix('driver')
     // Live GPS Location update (Phase 9)
     Route::post('/location/update', [DriverController::class, 'updateLocation'])->name('location.update');
 });
-
-// Delivery Webhook API (No Auth needed)
-Route::post('/api/delivery/webhook/{order}', [\App\Http\Controllers\DeliveryController::class, 'webhook'])->name('api.delivery.webhook')->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]);
