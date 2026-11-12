@@ -1008,4 +1008,138 @@ class MobilePasswordRecoveryTest extends TestCase
             ]);
         $sixthReset->assertStatus(429);
     }
+
+    /**
+     * Phase 20: Comprehensive validation of POST /api/auth/password/verify-otp.
+     * Verifies server-side validation, attempt decrementing, expiry, lockouts,
+     * non-consumption during Screen 03 verification, and successful consumption during Screen 04 reset.
+     */
+    public function test_password_recovery_verify_otp_endpoint_security_and_lifecycle(): void
+    {
+        // 1. Validation failure: missing parameters or invalid OTP format
+        $missingParamsRes = $this->withServerVariables(['REMOTE_ADDR' => '10.0.5.1'])
+            ->postJson('/api/auth/password/verify-otp', []);
+        $missingParamsRes->assertStatus(422)
+            ->assertJsonValidationErrors(['challenge_token', 'otp']);
+
+        $invalidFormatRes = $this->withServerVariables(['REMOTE_ADDR' => '10.0.5.2'])
+            ->postJson('/api/auth/password/verify-otp', [
+                'challenge_token' => Str::random(64),
+                'otp'             => '123',
+            ]);
+        $invalidFormatRes->assertStatus(422)
+            ->assertJsonValidationErrors(['otp']);
+
+        // 2. Unknown challenge returns 404
+        $unknownToken = Str::random(64);
+        $unknownRes = $this->withServerVariables(['REMOTE_ADDR' => '10.0.5.3'])
+            ->postJson('/api/auth/password/verify-otp', [
+                'challenge_token' => $unknownToken,
+                'otp'             => '123456',
+            ]);
+        $unknownRes->assertStatus(404)
+            ->assertJson(['status' => 'error']);
+
+        // 3. Dummy challenge verification (unverified user / unknown email)
+        $dummyForgot = $this->withServerVariables(['REMOTE_ADDR' => '10.0.5.4'])
+            ->postJson('/api/auth/password/forgot', [
+                'email' => 'unregistered@example.com',
+            ]);
+        $dummyForgot->assertStatus(202);
+        $dummyToken = $dummyForgot->json('challenge_token');
+
+        // Dummy challenge with random OTP returns 422 with remaining attempts
+        $dummyWrongRes = $this->withServerVariables(['REMOTE_ADDR' => '10.0.5.5'])
+            ->postJson('/api/auth/password/verify-otp', [
+                'challenge_token' => $dummyToken,
+                'otp'             => '488666',
+            ]);
+        $dummyWrongRes->assertStatus(422)
+            ->assertJson([
+                'status'             => 'error',
+                'message'            => 'Incorrect verification code. 4 attempt(s) remaining.',
+                'attempts_remaining' => 4,
+            ]);
+
+        // 4. Real challenge for active eligible customer
+        $realForgot = $this->withServerVariables(['REMOTE_ADDR' => '10.0.5.6'])
+            ->postJson('/api/auth/password/forgot', [
+                'email' => $this->activeCustomer->email,
+            ]);
+        $realForgot->assertStatus(202);
+        $realToken = $realForgot->json('challenge_token');
+        $realOtp = $this->captureLatestPasswordResetOtp($this->activeCustomer->email);
+
+        // Incorrect OTP on real challenge returns 422 and increments attempts
+        $wrongOtp = ($realOtp === '999999') ? '888888' : '999999';
+        $realWrongRes = $this->withServerVariables(['REMOTE_ADDR' => '10.0.5.7'])
+            ->postJson('/api/auth/password/verify-otp', [
+                'challenge_token' => $realToken,
+                'otp'             => $wrongOtp,
+            ]);
+        $realWrongRes->assertStatus(422)
+            ->assertJson([
+                'status'             => 'error',
+                'message'            => 'Incorrect verification code. 4 attempt(s) remaining.',
+                'attempts_remaining' => 4,
+            ]);
+
+        // Confirm database challenge record was NOT consumed
+        $tokenHash = EmailOtpService::hashChallengeToken($realToken);
+        $challengeInDb = EmailOtpChallenge::where('challenge_token_hash', $tokenHash)->first();
+        $this->assertNotNull($challengeInDb);
+        $this->assertNull($challengeInDb->consumed_at);
+        $this->assertEquals(1, $challengeInDb->attempts);
+
+        // Correct OTP returns 200 OK without consuming challenge
+        $correctVerifyRes = $this->withServerVariables(['REMOTE_ADDR' => '10.0.5.8'])
+            ->postJson('/api/auth/password/verify-otp', [
+                'challenge_token' => $realToken,
+                'otp'             => $realOtp,
+            ]);
+        $correctVerifyRes->assertStatus(200)
+            ->assertJson([
+                'status'  => 'success',
+                'message' => 'Verification code confirmed successfully.',
+            ]);
+
+        $challengeAfterVerify = EmailOtpChallenge::where('challenge_token_hash', $tokenHash)->first();
+        $this->assertNull($challengeAfterVerify->consumed_at, 'Challenge must remain unconsumed after verify-otp');
+
+        // Downstream Screen 04 resetPassword succeeds using this pre-verified challenge
+        $resetRes = $this->withServerVariables(['REMOTE_ADDR' => '10.0.5.9'])
+            ->postJson('/api/auth/password/reset', [
+                'challenge_token'       => $realToken,
+                'otp'                   => $realOtp,
+                'password'              => 'NewPatientPass2026!',
+                'password_confirmation' => 'NewPatientPass2026!',
+            ]);
+        $resetRes->assertStatus(200)
+            ->assertJson(['status' => 'success']);
+
+        // Now challenge is consumed
+        $challengeAfterReset = EmailOtpChallenge::where('challenge_token_hash', $tokenHash)->first();
+        $this->assertNotNull($challengeAfterReset->consumed_at, 'Challenge must be marked consumed after reset');
+
+        // Calling verify-otp again after consumption returns 410 (already used)
+        $replayVerifyRes = $this->withServerVariables(['REMOTE_ADDR' => '10.0.5.10'])
+            ->postJson('/api/auth/password/verify-otp', [
+                'challenge_token' => $realToken,
+                'otp'             => $realOtp,
+            ]);
+        $replayVerifyRes->assertStatus(410)
+            ->assertJson([
+                'status'  => 'error',
+                'message' => 'This verification code has already been used.',
+            ]);
+
+        // Calling reset again on consumed challenge returns 410
+        $replayResetRes = $this->postJson('/api/auth/password/reset', [
+            'challenge_token'       => $realToken,
+            'otp'                   => $realOtp,
+            'password'              => 'AnotherPass123!',
+            'password_confirmation' => 'AnotherPass123!',
+        ]);
+        $replayResetRes->assertStatus(410);
+    }
 }

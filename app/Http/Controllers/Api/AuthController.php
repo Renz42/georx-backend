@@ -554,6 +554,108 @@ class AuthController extends Controller
     }
 
     /**
+     * POST /api/auth/password/verify-otp
+     *
+     * Validates that the submitted OTP is authentic, unexpired, and within attempt limits
+     * for the provided password recovery challenge token WITHOUT consuming the challenge prematurely.
+     * Allows mobile Screen 03 to verify the code and block navigation if invalid.
+     */
+    public function verifyPasswordResetOtp(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'challenge_token' => ['required', 'string'],
+            'otp'             => ['required', 'string', 'digits:6'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 'error',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $challengeToken = trim((string) $request->input('challenge_token'));
+        $submittedOtp = trim((string) $request->input('otp'));
+        $tokenHash = EmailOtpService::hashChallengeToken($challengeToken);
+        $dummyCacheKey = self::DUMMY_CACHE_PREFIX . $tokenHash;
+
+        // 1. Handle non-authorizing dummy challenge token identically (never passes verification)
+        $dummyContext = Cache::get($dummyCacheKey);
+        if (is_array($dummyContext) && !empty($dummyContext['is_dummy'])) {
+            EmailOtpService::hashOtp($submittedOtp);
+            $nowTs = now()->timestamp;
+
+            if ($nowTs >= (int) ($dummyContext['expires_at'] ?? 0)) {
+                Cache::forget($dummyCacheKey);
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'Verification code has expired. Please request a new code.',
+                ], 410);
+            }
+
+            $attempts = (int) ($dummyContext['attempts'] ?? 0);
+            if ($attempts >= EmailOtpService::MAX_ATTEMPTS) {
+                return response()->json([
+                    'status'             => 'error',
+                    'message'            => 'Too many invalid attempts. This session is locked. Please request a new code.',
+                    'attempts_remaining' => 0,
+                ], 429);
+            }
+
+            $attempts++;
+            $dummyContext['attempts'] = $attempts;
+            $remaining = max(0, EmailOtpService::MAX_ATTEMPTS - $attempts);
+
+            Cache::put(
+                $dummyCacheKey,
+                $dummyContext,
+                now()->addMinutes(EmailOtpService::EXPIRATION_MINUTES + 5)
+            );
+
+            $errorMessage = $remaining > 0
+                ? "Incorrect verification code. {$remaining} attempt(s) remaining."
+                : 'Incorrect verification code. Maximum attempts exceeded. Please request a new code.';
+
+            return response()->json([
+                'status'             => 'error',
+                'message'            => $errorMessage,
+                'attempts_remaining' => $remaining,
+            ], 422);
+        }
+
+        // 2. Validate real challenge token and OTP without consuming
+        $result = EmailOtpService::verifyOtpWithoutConsuming(
+            challengeToken: $challengeToken,
+            submittedOtp: $submittedOtp,
+            expectedPurpose: EmailOtpService::PURPOSE_PASSWORD_RESET
+        );
+
+        if (!$result['success']) {
+            $payload = [
+                'status'  => 'error',
+                'message' => $result['error'],
+            ];
+            if (isset($result['attempts_remaining'])) {
+                $payload['attempts_remaining'] = $result['attempts_remaining'];
+            }
+            return response()->json($payload, $result['status']);
+        }
+
+        // 3. Confirm user eligibility
+        if (!$this->isUserEligibleForPatientRecovery($result['user'])) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Invalid or expired verification session.',
+            ], 404);
+        }
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Verification code confirmed successfully.',
+        ], 200);
+    }
+
+    /**
      * POST /api/auth/password/reset
      */
     public function resetPassword(Request $request)

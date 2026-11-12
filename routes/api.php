@@ -27,6 +27,8 @@ Route::post('/auth/password/forgot', [AuthController::class, 'forgotPassword'])
     ->middleware('throttle:patient_forgot');
 Route::post('/auth/password/resend', [AuthController::class, 'resendPasswordOtp'])
     ->middleware('throttle:patient_resend');
+Route::post('/auth/password/verify-otp', [AuthController::class, 'verifyPasswordResetOtp'])
+    ->middleware('throttle:patient_reset');
 Route::post('/auth/password/reset', [AuthController::class, 'resetPassword'])
     ->middleware('throttle:patient_reset');
 

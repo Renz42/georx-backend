@@ -516,6 +516,92 @@ class EmailOtpService
     }
 
     /**
+     * Atomically verify a submitted OTP against the challenge token without consuming it.
+     * Enforces expiry, attempt limits, purpose matching, and constant-time hash verification.
+     * Leaves the challenge unconsumed so that downstream actions (e.g., password reset)
+     * can atomically consume it during the final state update.
+     */
+    public static function verifyOtpWithoutConsuming(
+        string $challengeToken,
+        string $submittedOtp,
+        string|array|null $expectedPurpose = null
+    ): array {
+        $tokenHash = self::hashChallengeToken($challengeToken);
+
+        return DB::transaction(function () use ($tokenHash, $submittedOtp, $expectedPurpose) {
+            /** @var EmailOtpChallenge|null $challenge */
+            $challenge = EmailOtpChallenge::with('user')
+                ->where('challenge_token_hash', $tokenHash)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$challenge) {
+                return [
+                    'success' => false,
+                    'status'  => 404,
+                    'error'   => 'Invalid or expired verification session.',
+                ];
+            }
+
+            if (!self::purposeMatches((string) $challenge->purpose, $expectedPurpose)) {
+                return [
+                    'success' => false,
+                    'status'  => 400,
+                    'error'   => 'Verification purpose mismatch.',
+                ];
+            }
+
+            if ($challenge->isConsumed()) {
+                return [
+                    'success' => false,
+                    'status'  => 410,
+                    'error'   => 'This verification code has already been used.',
+                ];
+            }
+
+            if ($challenge->isExpired()) {
+                return [
+                    'success' => false,
+                    'status'  => 410,
+                    'error'   => 'Verification code has expired. Please request a new code.',
+                ];
+            }
+
+            if ($challenge->hasExceededAttempts()) {
+                return [
+                    'success' => false,
+                    'status'  => 429,
+                    'error'   => 'Too many invalid attempts. This session is locked. Please request a new code.',
+                    'attempts_remaining' => 0,
+                ];
+            }
+
+            // Constant-time hash verification (supports ambiguous-timeout recovery)
+            $submittedHash = self::hashOtp($submittedOtp);
+            if (!self::matchesValidOtpHash($challenge, $submittedHash)) {
+                $challenge->increment('attempts');
+                $remaining = max(0, $challenge->max_attempts - $challenge->attempts);
+
+                return [
+                    'success'            => false,
+                    'status'             => 422,
+                    'error'              => $remaining > 0
+                        ? "Incorrect verification code. {$remaining} attempt(s) remaining."
+                        : "Incorrect verification code. Maximum attempts exceeded. Please request a new code.",
+                    'attempts_remaining' => $remaining,
+                ];
+            }
+
+            return [
+                'success'   => true,
+                'status'    => 200,
+                'challenge' => $challenge,
+                'user'      => $challenge->user,
+            ];
+        });
+    }
+
+    /**
      * Resend an OTP code using a two-phase atomic reservation strategy:
      *
      * Phase 1 (short DB transaction + SELECT ... FOR UPDATE):
