@@ -991,4 +991,31 @@ class AuthSecurityTest extends TestCase
             \Illuminate\Support\Facades\URL::forceScheme(null);
         }
     }
+
+    public function test_admin_dashboard_sidebar_omits_drivers_archive_link(): void
+    {
+        $admin = User::create([
+            'name'              => 'Sidebar Admin',
+            'email'             => 'sidebaradmin@georx.test',
+            'phone'             => '09175558888',
+            'password'          => \Illuminate\Support\Facades\Hash::make('AdminPass123!'),
+            'role'              => User::ROLE_ADMINISTRATOR,
+            'account_status'    => User::STATUS_ACTIVE,
+            'email_verified_at' => now(),
+        ]);
+
+        $response = $this->actingAs($admin, 'admin')
+            ->get(route('admin.dashboard'));
+
+        $response->assertStatus(200)
+            ->assertDontSee(route('admin.drivers'), false)
+            ->assertDontSee('fa-motorcycle', false)
+            ->assertDontSee('>Archive<', false)
+            ->assertSee(route('admin.dashboard'), false)
+            ->assertSee(route('admin.pharmacies'), false)
+            ->assertSee(route('admin.users'), false)
+            ->assertSee(route('admin.medicines'), false)
+            ->assertSee(route('admin.reports'), false)
+            ->assertSee(route('admin.settings'), false);
+    }
 }
