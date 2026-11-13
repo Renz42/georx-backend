@@ -81,7 +81,7 @@ class AuthController extends Controller
     public function showAdminLogin(Request $request)
     {
         if (Auth::guard('admin')->check()) {
-            return redirect()->intended('/admin/dashboard');
+            return $this->redirectAfterPortalLogin($request, ['admin'], route('admin.dashboard'));
         }
 
         return view('auth.admin-login');
@@ -93,8 +93,9 @@ class AuthController extends Controller
             'email' => 'required|email',
             'password' => 'required',
         ]);
+        $attemptCredentials = $this->resolveAttemptCredentials($credentials);
 
-        if (Auth::guard('admin')->attempt($credentials, $request->boolean('remember'))) {
+        if (Auth::guard('admin')->attempt($attemptCredentials, $request->boolean('remember'))) {
             $user = Auth::guard('admin')->user();
 
             if ($user->role !== User::ROLE_ADMINISTRATOR) {
@@ -106,7 +107,7 @@ class AuthController extends Controller
 
             Auth::shouldUse('admin');
             $request->session()->regenerate();
-            return redirect()->intended('/admin/dashboard');
+            return $this->redirectAfterPortalLogin($request, ['admin'], route('admin.dashboard'));
         }
 
         return back()->withErrors(['email' => 'Invalid credentials.'])->onlyInput('email');
@@ -119,7 +120,7 @@ class AuthController extends Controller
     public function showPharmacyLogin(Request $request)
     {
         if (Auth::guard('pharmacy')->check()) {
-            return redirect()->intended('/pharmacy/dashboard');
+            return $this->redirectAfterPortalLogin($request, ['pharmacy', 'portal'], route('pharmacy.dashboard'));
         }
 
         return view('auth.pharmacy-login');
@@ -131,8 +132,9 @@ class AuthController extends Controller
             'email' => 'required|email',
             'password' => 'required',
         ]);
+        $attemptCredentials = $this->resolveAttemptCredentials($credentials);
 
-        if (Auth::guard('pharmacy')->attempt($credentials, $request->boolean('remember'))) {
+        if (Auth::guard('pharmacy')->attempt($attemptCredentials, $request->boolean('remember'))) {
             $user = Auth::guard('pharmacy')->user();
 
             if (!in_array($user->role, [User::ROLE_PHARMACY_OWNER, User::ROLE_PHARMACIST, User::ROLE_PHARMACY_STAFF])) {
@@ -153,7 +155,7 @@ class AuthController extends Controller
 
             Auth::shouldUse('pharmacy');
             $request->session()->regenerate();
-            return redirect()->intended('/pharmacy/dashboard');
+            return $this->redirectAfterPortalLogin($request, ['pharmacy', 'portal'], route('pharmacy.dashboard'));
         }
 
         return back()->withErrors(['email' => 'Invalid credentials.'])->onlyInput('email');
@@ -194,6 +196,64 @@ class AuthController extends Controller
         }
         
         return redirect('/');
+    }
+
+    /**
+     * Resolve exact stored email casing for case-insensitive portal login.
+     *
+     * @param  array{email: string, password: string}  $credentials
+     * @return array{email: string, password: string}
+     */
+    private function resolveAttemptCredentials(array $credentials): array
+    {
+        $normalizedEmail = mb_strtolower(trim((string) $credentials['email']));
+        $matchedUser = User::whereRaw('LOWER(email) = ?', [$normalizedEmail])->first();
+
+        return [
+            'email' => $matchedUser ? $matchedUser->email : $normalizedEmail,
+            'password' => $credentials['password'],
+        ];
+    }
+
+    /**
+     * Redirect directly to the portal dashboard unless url.intended safely
+     * targets an authenticated page inside the same portal.
+     *
+     * @param  array<int, string>  $allowedPrefixes
+     */
+    private function redirectAfterPortalLogin(Request $request, array $allowedPrefixes, string $defaultUrl)
+    {
+        $intended = $request->session()->pull('url.intended');
+        if (! is_string($intended) || $intended === '') {
+            return redirect($defaultUrl);
+        }
+
+        $path = parse_url($intended, PHP_URL_PATH);
+        if (! is_string($path) || $path === '') {
+            return redirect($defaultUrl);
+        }
+
+        $normalized = ltrim($path, '/');
+        $matchesPortal = false;
+        foreach ($allowedPrefixes as $prefix) {
+            if ($normalized === $prefix || str_starts_with($normalized, $prefix . '/')) {
+                $matchesPortal = true;
+                break;
+            }
+        }
+
+        if (! $matchesPortal) {
+            return redirect($defaultUrl);
+        }
+
+        if (preg_match('#^(?:admin|pharmacy|portal|driver)?/?(?:login|logout|forgot-password|reset-password(?:/.*)?)$#i', $normalized)) {
+            return redirect($defaultUrl);
+        }
+
+        $query = parse_url($intended, PHP_URL_QUERY);
+        $relativeTarget = '/' . $normalized . (is_string($query) && $query !== '' ? '?' . $query : '');
+
+        return redirect()->to(url($relativeTarget));
     }
 
     // =============================================

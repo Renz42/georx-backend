@@ -22,7 +22,7 @@ class RoleMiddleware
     public function handle(Request $request, Closure $next, string ...$roles): Response
     {
         if (! $request->user()) {
-            return redirect('/login')->with('error', 'Please login to continue.');
+            return redirect($this->resolveGuestLoginUrl($request))->with('error', 'Please login to continue.');
         }
 
         $user = $request->user();
@@ -114,5 +114,25 @@ class RoleMiddleware
         }
 
         return redirect('/dashboard')->with('error', 'Access denied.');
+    }
+
+    /**
+     * Resolve the portal-specific login URL for unauthenticated requests.
+     */
+    public static function resolveGuestLoginUrl(Request $request): string
+    {
+        if ($request->is('admin', 'admin/*')) {
+            return route('admin.login');
+        }
+
+        if ($request->is('pharmacy', 'pharmacy/*', 'portal', 'portal/*')) {
+            return route('pharmacy.login');
+        }
+
+        if ($request->is('driver', 'driver/*')) {
+            return route('driver.login');
+        }
+
+        return route('login');
     }
 }

@@ -48,6 +48,9 @@ Route::get('/pharmacy/{pharmacy_id}/medicine/{medicine_id}', [PharmacyController
     Route::post('/register', [AuthController::class, 'registerUser']);
 
     // 2. ADMIN PORTAL
+    Route::get('/admin', fn () => \Illuminate\Support\Facades\Auth::guard('admin')->check()
+        ? redirect()->route('admin.dashboard')
+        : redirect()->route('admin.login'));
     Route::get('/admin/login', [AuthController::class, 'showAdminLogin'])->name('admin.login');
     Route::post('/admin/login', [AuthController::class, 'loginAdmin'])->middleware('throttle:10,1');
     Route::get('/admin/forgot-password', [AuthController::class, 'showAdminForgotPassword'])->name('admin.password.request');
@@ -57,6 +60,9 @@ Route::get('/pharmacy/{pharmacy_id}/medicine/{medicine_id}', [PharmacyController
     Route::post('/admin/reset-password/resend', [AuthController::class, 'resendAdminResetOtp'])->middleware('throttle:admin_resend')->name('admin.password.resend');
     
     // 3. PHARMACY PORTAL
+    Route::get('/pharmacy', fn () => \Illuminate\Support\Facades\Auth::guard('pharmacy')->check()
+        ? redirect()->route('pharmacy.dashboard')
+        : redirect()->route('pharmacy.login'));
     Route::get('/pharmacy/login', [AuthController::class, 'showPharmacyLogin'])->name('pharmacy.login');
     Route::post('/pharmacy/login', [AuthController::class, 'loginPharmacy'])->middleware('throttle:10,1');
     Route::get('/pharmacy/forgot-password', [AuthController::class, 'showPharmacyForgotPassword'])->name('pharmacy.password.request');

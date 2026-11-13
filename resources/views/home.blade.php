@@ -546,7 +546,7 @@ $nData = is_array($notification->data) ? $notification->data : [];
 </div>
 
 
-<a href="{{ auth()->user()->role === 'super_admin' ? route('admin.dashboard') : (auth()->user()->role === 'pharmacy_admin' ? route('portal.dashboard') : route('user.dashboard')) }}" 
+<a href="{{ in_array(auth()->user()->role, [\App\Models\User::ROLE_ADMINISTRATOR, 'super_admin'], true) ? route('admin.dashboard') : (in_array(auth()->user()->role, [\App\Models\User::ROLE_PHARMACY_OWNER, \App\Models\User::ROLE_PHARMACIST, \App\Models\User::ROLE_PHARMACY_STAFF, 'pharmacy_admin'], true) ? route('pharmacy.dashboard') : (auth()->user()->isDriver() ? route('driver.dashboard') : route('user.dashboard'))) }}" 
 
 class="w-14 h-14 bg-geo-600 text-geo-100 rounded-2xl shadow-[0_4px_20px_rgba(47,126,106,0.4)] border border-geo-900/10 flex justify-center items-center hover:bg-geo-900 transition hover:scale-105" title="Go to Dashboard">
 

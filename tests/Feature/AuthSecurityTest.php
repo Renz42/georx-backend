@@ -805,4 +805,190 @@ class AuthSecurityTest extends TestCase
             ->assertJsonPath('status', 'error');
         $this->assertStringNotContainsString('Brevo', $failedLoginRes->getContent());
     }
+
+    public function test_unauthenticated_portal_routes_redirect_to_matching_portal_login(): void
+    {
+        $this->get('/admin')
+            ->assertRedirect(route('admin.login'));
+
+        $this->get('/pharmacy')
+            ->assertRedirect(route('pharmacy.login'));
+
+        $this->get(route('admin.dashboard'))
+            ->assertRedirect(route('admin.login'));
+
+        $this->get(route('pharmacy.dashboard'))
+            ->assertRedirect(route('pharmacy.login'));
+
+        $this->get(route('portal.dashboard'))
+            ->assertRedirect(route('pharmacy.login'));
+
+        $this->get(route('driver.dashboard'))
+            ->assertRedirect(route('driver.login'));
+
+        $this->getJson('/api/user')
+            ->assertStatus(401);
+    }
+
+    public function test_portal_logins_normalize_case_and_open_dashboard_directly_ignoring_stale_intended_urls(): void
+    {
+        $pharmacy = \App\Models\Pharmacy::create([
+            'name'        => 'Direct Portal Pharmacy',
+            'slug'        => 'direct-portal-pharmacy',
+            'address'     => 'Alijis Road, Bacolod City',
+            'phone'       => '09175551111',
+            'email'       => 'direct@pharmacy.test',
+            'latitude'    => 10.6400,
+            'longitude'   => 122.9500,
+            'owner_name'  => 'Direct Owner',
+            'is_approved' => true,
+            'is_active'   => true,
+            'status'      => 'approved',
+        ]);
+
+        $admin = \App\Models\User::create([
+            'name'              => 'Direct Admin',
+            'email'             => 'directadmin@georx.test',
+            'phone'             => '09175552222',
+            'password'          => \Illuminate\Support\Facades\Hash::make('AdminPass123!'),
+            'role'              => \App\Models\User::ROLE_ADMINISTRATOR,
+            'account_status'    => \App\Models\User::STATUS_ACTIVE,
+            'email_verified_at' => now(),
+        ]);
+
+        $owner = \App\Models\User::create([
+            'name'              => 'Direct Owner',
+            'email'             => 'directowner@pharmacy.test',
+            'phone'             => '09175553333',
+            'password'          => \Illuminate\Support\Facades\Hash::make('OwnerPass123!'),
+            'role'              => \App\Models\User::ROLE_PHARMACY_OWNER,
+            'pharmacy_id'       => $pharmacy->id,
+            'account_status'    => \App\Models\User::STATUS_ACTIVE,
+            'email_verified_at' => now(),
+        ]);
+
+        // Cross-portal stale intended URL must never hijack admin sign-in.
+        $adminLogin = $this->withSession(['url.intended' => 'http://localhost/pharmacy/orders'])
+            ->post(route('admin.login'), [
+                'email'    => 'DIRECTADMIN@GEORX.TEST',
+                'password' => 'AdminPass123!',
+            ]);
+        $adminLogin->assertRedirect(route('admin.dashboard'));
+        $this->assertAuthenticatedAs($admin, 'admin');
+
+        // Re-visiting /admin/login with a stale logout URL must also land directly on dashboard.
+        $this->withSession(['url.intended' => 'http://localhost/logout'])
+            ->get(route('admin.login'))
+            ->assertRedirect(route('admin.dashboard'));
+
+        // Cross-portal stale intended URL must never hijack pharmacy sign-in.
+        $pharmacyLogin = $this->withSession(['url.intended' => 'http://localhost/admin/dashboard'])
+            ->post(route('pharmacy.login'), [
+                'email'    => 'DirectOwner@PHARMACY.Test',
+                'password' => 'OwnerPass123!',
+            ]);
+        $pharmacyLogin->assertRedirect(route('pharmacy.dashboard'));
+        $this->assertAuthenticatedAs($owner, 'pharmacy');
+
+        $this->get('/admin')->assertRedirect(route('admin.dashboard'));
+        $this->get('/pharmacy')->assertRedirect(route('pharmacy.dashboard'));
+
+        // Same-portal intended deep link remains preserved when safe.
+        $this->withSession(['url.intended' => 'http://localhost/pharmacy/orders?status=pending'])
+            ->get(route('pharmacy.login'))
+            ->assertRedirect(url('/pharmacy/orders?status=pending'));
+    }
+
+    public function test_hosted_https_scheme_renders_https_form_actions_and_trusts_loopback_proxy(): void
+    {
+        $pharmacy = \App\Models\Pharmacy::create([
+            'name'        => 'HTTPS Portal Pharmacy',
+            'slug'        => 'https-portal-pharmacy',
+            'address'     => 'Alijis Road, Bacolod City',
+            'phone'       => '09175554444',
+            'email'       => 'https@pharmacy.test',
+            'latitude'    => 10.6400,
+            'longitude'   => 122.9500,
+            'owner_name'  => 'HTTPS Owner',
+            'is_approved' => true,
+            'is_active'   => true,
+            'status'      => 'approved',
+        ]);
+
+        $admin = \App\Models\User::create([
+            'name'              => 'HTTPS Admin',
+            'email'             => 'httpsadmin@georx.test',
+            'phone'             => '09175556666',
+            'password'          => \Illuminate\Support\Facades\Hash::make('AdminPass123!'),
+            'role'              => \App\Models\User::ROLE_ADMINISTRATOR,
+            'account_status'    => \App\Models\User::STATUS_ACTIVE,
+            'email_verified_at' => now(),
+        ]);
+
+        $owner = \App\Models\User::create([
+            'name'              => 'HTTPS Owner',
+            'email'             => 'httpsowner@pharmacy.test',
+            'phone'             => '09175557777',
+            'password'          => \Illuminate\Support\Facades\Hash::make('OwnerPass123!'),
+            'role'              => \App\Models\User::ROLE_PHARMACY_OWNER,
+            'pharmacy_id'       => $pharmacy->id,
+            'account_status'    => \App\Models\User::STATUS_ACTIVE,
+            'email_verified_at' => now(),
+        ]);
+
+        try {
+            \Illuminate\Support\Facades\URL::forceScheme('https');
+
+            $proxyHeaders = [
+                'REMOTE_ADDR'            => '127.0.0.1',
+                'HTTP_X_FORWARDED_PROTO' => 'https',
+                'HTTP_HOST'              => 'georx-backend.onrender.com',
+            ];
+
+            $adminPage = $this->withServerVariables($proxyHeaders)
+                ->get('https://georx-backend.onrender.com/admin/login');
+            $adminPage->assertStatus(200)
+                ->assertSee('action="https://georx-backend.onrender.com/admin/login"', false)
+                ->assertDontSee('action="http://', false);
+            $this->assertTrue(request()->isSecure());
+
+            $pharmacyPage = $this->withServerVariables($proxyHeaders)
+                ->get('https://georx-backend.onrender.com/pharmacy/login');
+            $pharmacyPage->assertStatus(200)
+                ->assertSee('action="https://georx-backend.onrender.com/pharmacy/login"', false)
+                ->assertDontSee('action="http://', false);
+
+            $patientPage = $this->withServerVariables($proxyHeaders)
+                ->get('https://georx-backend.onrender.com/login');
+            $patientPage->assertStatus(200)
+                ->assertSee('action="https://georx-backend.onrender.com/login"', false)
+                ->assertDontSee('action="http://', false);
+
+            $adminDash = $this->actingAs($admin, 'admin')
+                ->withServerVariables($proxyHeaders)
+                ->get('https://georx-backend.onrender.com/admin/dashboard');
+            $adminDash->assertStatus(200)
+                ->assertSee('action="https://georx-backend.onrender.com/logout"', false)
+                ->assertDontSee('action="http://', false);
+
+            $pharmacyDash = $this->actingAs($owner, 'pharmacy')
+                ->withServerVariables($proxyHeaders)
+                ->get('https://georx-backend.onrender.com/pharmacy/dashboard');
+            $pharmacyDash->assertStatus(200)
+                ->assertSee('action="https://georx-backend.onrender.com/logout"', false)
+                ->assertDontSee('action="http://', false);
+
+            // Even an old http:// same-portal url.intended upgrades to https:// on login.
+            \Illuminate\Support\Facades\Auth::guard('pharmacy')->logout();
+            $upgradedRedirect = $this->withServerVariables($proxyHeaders)
+                ->withSession(['url.intended' => 'http://georx-backend.onrender.com/pharmacy/orders?status=pending'])
+                ->post('https://georx-backend.onrender.com/pharmacy/login', [
+                    'email'    => 'httpsowner@pharmacy.test',
+                    'password' => 'OwnerPass123!',
+                ]);
+            $upgradedRedirect->assertRedirect('https://georx-backend.onrender.com/pharmacy/orders?status=pending');
+        } finally {
+            \Illuminate\Support\Facades\URL::forceScheme(null);
+        }
+    }
 }

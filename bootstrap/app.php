@@ -21,8 +21,10 @@ return Application::configure(basePath: dirname(__DIR__))
                 '172.16.0.0/12',
                 '192.168.0.0/16',
                 '100.64.0.0/10',
+                '127.0.0.0/8',
                 'fc00::/7',
                 'fe80::/10',
+                '::1',
             ];
 
         $middleware->trustProxies(
@@ -33,6 +35,13 @@ return Application::configure(basePath: dirname(__DIR__))
                 \Illuminate\Http\Request::HEADER_X_FORWARDED_PROTO |
                 \Illuminate\Http\Request::HEADER_X_FORWARDED_AWS_ELB
         );
+        $middleware->redirectGuestsTo(function (\Illuminate\Http\Request $request) {
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return null;
+            }
+
+            return \App\Http\Middleware\RoleMiddleware::resolveGuestLoginUrl($request);
+        });
         $middleware->alias([
             'role' => \App\Http\Middleware\RoleMiddleware::class,
             'alijis.geofence' => \App\Http\Middleware\EnsureWithinAlijis::class,

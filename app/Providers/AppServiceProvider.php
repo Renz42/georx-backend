@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\URL;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -25,6 +26,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        if ($this->shouldForceHttps()) {
+            URL::forceScheme('https');
+        }
+
         // Super Administrator Gate
         Gate::define('manage-system', function ($user) {
             return $user->role === 'administrator';
@@ -161,5 +166,34 @@ class AppServiceProvider extends ServiceProvider
             $key = $config['key'] ?? config('services.brevo.key') ?? env('BREVO_API_KEY', '');
             return new \App\Mail\Transport\BrevoApiTransport($key);
         });
+    }
+
+    /**
+     * Force HTTPS URL and form-action generation on hosted environments without
+     * breaking local HTTP development or PHPUnit assertions.
+     */
+    private function shouldForceHttps(): bool
+    {
+        if ($this->app->runningUnitTests()) {
+            return false;
+        }
+
+        if ($this->app->isProduction()) {
+            return true;
+        }
+
+        if (str_starts_with(strtolower((string) config('app.url', '')), 'https://')) {
+            return true;
+        }
+
+        if ($this->app->runningInConsole()) {
+            return false;
+        }
+
+        $request = request();
+
+        return $request->isSecure()
+            || strtolower((string) $request->header('X-Forwarded-Proto', '')) === 'https'
+            || str_ends_with(strtolower((string) $request->getHost()), '.onrender.com');
     }
 }
