@@ -621,4 +621,188 @@ class AuthSecurityTest extends TestCase
             }
         }
     }
+
+    /** 21. BrevoApiTransport omits null recipient/sender names and enforces key/HTTP checks */
+    public function test_brevo_api_transport_omits_null_names_and_handles_errors(): void
+    {
+        \Illuminate\Support\Facades\Http::fake([
+            'https://api.brevo.com/v3/smtp/email' => \Illuminate\Support\Facades\Http::response(['messageId' => '<test-123@georx.ph>'], 201),
+        ]);
+
+        config([
+            'mail.from.address' => 'noreply@georx.ph',
+            'mail.from.name'    => 'GEORX Medicine Hub',
+        ]);
+
+        $transport = new \App\Mail\Transport\BrevoApiTransport('test-brevo-key');
+        $email = (new \Symfony\Component\Mime\Email())
+            ->from(new \Symfony\Component\Mime\Address('noreply@georx.ph', 'GEORX Medicine Hub'))
+            ->to('newpatient@gmail.com')
+            ->subject('GEORX Verification')
+            ->html('<p>Code: 123456</p>');
+
+        $transport->send($email);
+
+        \Illuminate\Support\Facades\Http::assertSent(function (\Illuminate\Http\Client\Request $request) {
+            $payload = $request->data();
+            $toEntry = $payload['to'][0] ?? [];
+
+            return $request->url() === 'https://api.brevo.com/v3/smtp/email'
+                && $request->hasHeader('api-key', 'test-brevo-key')
+                && ($payload['sender']['email'] ?? null) === 'noreply@georx.ph'
+                && ($payload['sender']['name'] ?? null) === 'GEORX Medicine Hub'
+                && ($toEntry['email'] ?? null) === 'newpatient@gmail.com'
+                && !array_key_exists('name', $toEntry);
+        });
+
+        // Missing API key throws TransportException before external HTTP call
+        $emptyKeyTransport = new \App\Mail\Transport\BrevoApiTransport('');
+        $this->expectException(\Symfony\Component\Mailer\Exception\TransportException::class);
+        $emptyKeyTransport->send($email);
+    }
+
+    /** 22. Registration never returns fake HTTP 202 on email failure, cleans up on definitive failure, and preserves ambiguous timeout */
+    public function test_mobile_registration_handles_definitive_delivery_failure_and_ambiguous_timeout(): void
+    {
+        // A. Definitive Brevo failure rolls back newly created unverified user and returns 503
+        \Illuminate\Support\Facades\Mail::shouldReceive('to')
+            ->once()
+            ->with('failcase@gmail.com')
+            ->andThrow(new \Symfony\Component\Mailer\Exception\TransportException('Brevo API delivery failed: HTTP 400 Bad Request'));
+
+        $definitiveFailRes = $this->postJson('/api/register', [
+            'name'                  => 'Fail Case',
+            'email'                 => '  FailCase@Gmail.com  ',
+            'phone'                 => '09171230001',
+            'password'              => 'PatientPass123!',
+            'password_confirmation' => 'PatientPass123!',
+        ]);
+
+        $definitiveFailRes->assertStatus(503)
+            ->assertJsonPath('status', 'error')
+            ->assertJsonMissingPath('challenge_token');
+        $this->assertStringNotContainsString('Brevo', $definitiveFailRes->getContent());
+        $this->assertNull(User::where('email', 'failcase@gmail.com')->first());
+
+        // B. Ambiguous timeout preserves challenge in ambiguous_timeout state and returns 503 with challenge_token
+        \Illuminate\Support\Facades\Mail::shouldReceive('to')
+            ->once()
+            ->with('timeoutcase@gmail.com')
+            ->andThrow(new \Illuminate\Http\Client\ConnectionException('cURL error 28: Operation timed out after 15001 milliseconds'));
+
+        $timeoutRes = $this->postJson('/api/register', [
+            'name'                  => 'Timeout Case',
+            'email'                 => 'TimeoutCase@Gmail.com',
+            'password'              => 'PatientPass123!',
+            'password_confirmation' => 'PatientPass123!',
+        ]);
+
+        $timeoutRes->assertStatus(503)
+            ->assertJsonPath('status', 'error')
+            ->assertJsonPath('ambiguous_timeout', true)
+            ->assertJsonStructure(['challenge_token', 'masked_email']);
+
+        $timeoutChallenge = \App\Models\EmailOtpChallenge::where('email', 'timeoutcase@gmail.com')->first();
+        $this->assertNotNull($timeoutChallenge);
+        $this->assertEquals(\App\Services\EmailOtpService::STATE_AMBIGUOUS_TIMEOUT, $timeoutChallenge->delivery_state);
+    }
+
+    /** 23. Case-insensitive email registration, duplicate prevention, unverified login recovery, and post-verify Forgot Password eligibility */
+    public function test_case_insensitive_registration_login_and_pending_re_registration_guidance(): void
+    {
+        \Illuminate\Support\Facades\Mail::fake();
+
+        // Register with mixed-case email
+        $regRes = $this->postJson('/api/register', [
+            'name'                  => 'Case Patient',
+            'email'                 => '  New.Patient@Gmail.COM ',
+            'phone'                 => '09179998888',
+            'password'              => 'PatientPass123!',
+            'password_confirmation' => 'PatientPass123!',
+        ]);
+        $regRes->assertStatus(202)
+            ->assertJsonPath('status', 'verification_required');
+
+        $storedUser = User::where('email', 'new.patient@gmail.com')->first();
+        $this->assertNotNull($storedUser);
+
+        $challenge = \App\Models\EmailOtpChallenge::where('user_id', $storedUser->id)->firstOrFail();
+        $this->assertEquals(\App\Services\EmailOtpService::STATE_DELIVERED, $challenge->delivery_state);
+
+        // Duplicate registration attempt with different casing detects pending verification cleanly
+        $dupRes = $this->postJson('/api/register', [
+            'name'                  => 'Case Patient',
+            'email'                 => 'new.patient@GMAIL.com',
+            'password'              => 'PatientPass123!',
+            'password_confirmation' => 'PatientPass123!',
+        ]);
+        $dupRes->assertStatus(422)
+            ->assertJsonPath('verification_pending', true);
+
+        // Unverified login succeeds with uppercase email and issues email_verification OTP
+        $loginPendingRes = $this->postJson('/api/login', [
+            'email'    => 'NEW.PATIENT@gmail.com',
+            'password' => 'PatientPass123!',
+            'role'     => 'customer',
+        ]);
+        $loginPendingRes->assertStatus(202)
+            ->assertJsonPath('verification_required', true);
+
+        $loginChallengeToken = $loginPendingRes->json('challenge_token');
+        $loginOtp = null;
+        \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\EmailOtpMailable::class, function ($mail) use (&$loginOtp) {
+            if ($mail->purpose === 'email_verification') {
+                $loginOtp = $mail->otp;
+                return true;
+            }
+            return false;
+        });
+        $this->assertNotNull($loginOtp);
+
+        // Complete OTP verification -> activates account & sets email_verified_at
+        $verifyRes = $this->postJson('/api/auth/otp/verify', [
+            'challenge_token' => $loginChallengeToken,
+            'otp'             => $loginOtp,
+        ]);
+        $verifyRes->assertStatus(200)
+            ->assertJsonStructure(['token', 'user']);
+
+        $storedUser->refresh();
+        $this->assertEquals(User::STATUS_ACTIVE, $storedUser->account_status);
+        $this->assertNotNull($storedUser->email_verified_at);
+
+        // Verified new user is immediately eligible for Forgot Password (real DB challenge, not dummy)
+        \Illuminate\Support\Facades\Mail::fake();
+        $forgotRes = $this->postJson('/api/auth/password/forgot', [
+            'email' => 'New.Patient@Gmail.com',
+        ]);
+        $forgotRes->assertStatus(202);
+        \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\EmailOtpMailable::class, function ($mail) {
+            return $mail->purpose === 'password_reset';
+        });
+
+        // Unverified login also returns 503 instead of fake 202 when Brevo fails
+        $unverified2 = User::create([
+            'name'              => 'Unverified Two',
+            'email'             => 'unverified2@gmail.com',
+            'password'          => bcrypt('CustomerPass123!'),
+            'role'              => User::ROLE_CUSTOMER,
+            'account_status'    => User::STATUS_PENDING_VERIFICATION,
+            'email_verified_at' => null,
+        ]);
+
+        \Illuminate\Support\Facades\Mail::shouldReceive('to')
+            ->once()
+            ->with('unverified2@gmail.com')
+            ->andThrow(new \Symfony\Component\Mailer\Exception\TransportException('Brevo API delivery failed: HTTP 500'));
+
+        $failedLoginRes = $this->postJson('/api/login', [
+            'email'    => 'UNVERIFIED2@gmail.com',
+            'password' => 'CustomerPass123!',
+            'role'     => 'customer',
+        ]);
+        $failedLoginRes->assertStatus(503)
+            ->assertJsonPath('status', 'error');
+        $this->assertStringNotContainsString('Brevo', $failedLoginRes->getContent());
+    }
 }

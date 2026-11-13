@@ -17,31 +17,41 @@ class BrevoApiTransport extends AbstractTransport
     public function __construct(string $apiKey)
     {
         parent::__construct();
-        $this->apiKey = $apiKey;
+        $this->apiKey = trim($apiKey);
     }
 
     protected function doSend(SentMessage $message): void
     {
         $email = MessageConverter::toEmail($message->getOriginalMessage());
 
-        if (empty($this->apiKey)) {
+        if ($this->apiKey === '') {
             throw new TransportException('Brevo API key is not configured.');
         }
 
-        // Format sender
+        // Format sender (omit empty name to comply strictly with Brevo v3 schema)
         $from = $email->getFrom()[0] ?? null;
-        $sender = [
-            'email' => $from ? $from->getAddress() : config('mail.from.address', 'noreply@georx.ph'),
-            'name'  => $from ? ($from->getName() ?: config('mail.from.name', 'GEORX Medicine Hub')) : config('mail.from.name', 'GEORX Medicine Hub'),
-        ];
+        $senderEmail = $from ? trim((string) $from->getAddress()) : trim((string) config('mail.from.address', 'noreply@georx.ph'));
+        $senderName = $from ? trim((string) $from->getName()) : '';
+        if ($senderName === '') {
+            $senderName = trim((string) config('mail.from.name', 'GEORX Medicine Hub'));
+        }
 
-        // Format recipients
+        $sender = ['email' => $senderEmail];
+        if ($senderName !== '') {
+            $sender['name'] = $senderName;
+        }
+
+        // Format recipients (omit empty name rather than sending JSON null)
         $to = [];
         foreach ($email->getTo() as $recipient) {
-            $to[] = [
-                'email' => $recipient->getAddress(),
-                'name'  => $recipient->getName() ?: null,
+            $entry = [
+                'email' => trim((string) $recipient->getAddress()),
             ];
+            $recipientName = trim((string) $recipient->getName());
+            if ($recipientName !== '') {
+                $entry['name'] = $recipientName;
+            }
+            $to[] = $entry;
         }
 
         $payload = [

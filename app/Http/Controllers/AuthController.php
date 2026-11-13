@@ -40,8 +40,15 @@ class AuthController extends Controller
             'email' => 'required|email',
             'password' => 'required',
         ]);
+        $credentials['email'] = mb_strtolower(trim((string) $credentials['email']));
 
-        if (Auth::guard('web')->attempt($credentials, $request->boolean('remember'))) {
+        $matchedUser = User::whereRaw('LOWER(email) = ?', [$credentials['email']])->first();
+        $attemptCredentials = [
+            'email'    => $matchedUser ? $matchedUser->email : $credentials['email'],
+            'password' => $credentials['password'],
+        ];
+
+        if (Auth::guard('web')->attempt($attemptCredentials, $request->boolean('remember'))) {
             $user = Auth::guard('web')->user();
             
             // SECURITY CHECK: Kick out Admins trying to use the Patient door
@@ -203,24 +210,48 @@ class AuthController extends Controller
 
     public function registerUser(Request $request)
     {
+        if (is_string($request->input('email'))) {
+            $request->merge(['email' => mb_strtolower(trim($request->input('email')))]);
+        }
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:users',
+            'email' => 'required|email',
             'phone' => 'nullable|string|max:20',
             'password' => 'required|min:8|confirmed',
         ]);
 
+        $normalizedEmail = mb_strtolower(trim($validated['email']));
+        if (User::whereRaw('LOWER(email) = ?', [$normalizedEmail])->exists()) {
+            return back()
+                ->withErrors(['email' => 'The email has already been taken.'])
+                ->withInput($request->except('password', 'password_confirmation'));
+        }
+
         $user = User::create([
-            'name'           => $validated['name'],
-            'email'          => $validated['email'],
-            'phone'          => $validated['phone'] ?? null,
+            'name'           => trim($validated['name']),
+            'email'          => $normalizedEmail,
+            'phone'          => !empty($validated['phone']) ? trim((string) $validated['phone']) : null,
             'password'       => Hash::make($validated['password']),
             'role'           => User::ROLE_CUSTOMER,
             'account_status' => User::STATUS_PENDING_VERIFICATION,
         ]);
 
         // Issue 6-digit OTP verification code
-        \App\Services\EmailOtpService::createChallenge($user, 'registration');
+        $otpResult = \App\Services\EmailOtpService::createChallenge($user, 'registration');
+
+        if (!empty($otpResult['delivery_failed']) && empty($otpResult['ambiguous_timeout'])) {
+            try {
+                EmailOtpChallenge::where('user_id', $user->id)->delete();
+                $user->delete();
+            } catch (\Throwable $cleanupException) {
+                Log::warning("Failed web unverified user cleanup [{$user->id}]: " . $cleanupException->getMessage());
+            }
+
+            return back()
+                ->withErrors(['email' => $otpResult['error'] ?? 'Unable to send verification email right now. Please try again shortly.'])
+                ->withInput($request->except('password', 'password_confirmation'));
+        }
 
         return redirect()->route('login')->with('success', 'Account created! Please check your email for the verification code to activate your account.');
     }

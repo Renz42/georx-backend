@@ -21,11 +21,20 @@ class AuthController extends Controller
     public const GENERIC_PATIENT_RESET_REQUEST_MESSAGE = 'If an eligible patient account is associated with that email address, a six-digit verification code has been sent.';
     public const GENERIC_PATIENT_RESEND_MESSAGE = 'A new six-digit verification code has been sent to your email.';
     protected const DUMMY_CACHE_PREFIX = 'patient_pwd_dummy:';
+    protected function normalizeEmail(mixed $email): string
+    {
+        return is_string($email) ? mb_strtolower(trim($email)) : '';
+    }
+
     public function register(Request $request)
     {
+        if (is_string($request->input('email'))) {
+            $request->merge(['email' => $this->normalizeEmail($request->input('email'))]);
+        }
+
         $validator = Validator::make($request->all(), [
             'name'     => 'required|string|max:255',
-            'email'    => 'required|string|email|max:255|unique:users',
+            'email'    => 'required|string|email|max:255',
             'phone'    => 'nullable|string|max:20',
             'password' => 'required|string|min:8|confirmed',
         ]);
@@ -37,19 +46,85 @@ class AuthController extends Controller
             ], 422);
         }
 
+        $normalizedEmail = $this->normalizeEmail($request->input('email'));
+        $existingUser = User::whereRaw('LOWER(email) = ?', [$normalizedEmail])->first();
+
+        if ($existingUser) {
+            if (
+                $existingUser->role === User::ROLE_CUSTOMER
+                && $existingUser->account_status === User::STATUS_PENDING_VERIFICATION
+                && $existingUser->email_verified_at === null
+            ) {
+                return response()->json([
+                    'status'               => 'error',
+                    'verification_pending' => true,
+                    'message'              => 'An account with this email is already awaiting verification. Please sign in to receive a new verification code.',
+                    'errors'               => [
+                        'email' => ['An account with this email is already awaiting verification. Please sign in to receive a new verification code.'],
+                    ],
+                ], 422);
+            }
+
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'The email has already been taken.',
+                'errors'  => [
+                    'email' => ['The email has already been taken.'],
+                ],
+            ], 422);
+        }
+
+        $cleanPhone = is_string($request->phone) ? trim($request->phone) : null;
+
         // Create user with pending_verification status and unverified email
-        $user = User::create([
-            'name'              => $request->name,
-            'email'             => $request->email,
-            'phone'             => $request->phone,
-            'password'          => Hash::make($request->password),
-            'role'              => User::ROLE_CUSTOMER,
-            'account_status'    => User::STATUS_PENDING_VERIFICATION,
-            'email_verified_at' => null,
-        ]);
+        try {
+            $user = User::create([
+                'name'              => trim((string) $request->name),
+                'email'             => $normalizedEmail,
+                'phone'             => $cleanPhone !== '' ? $cleanPhone : null,
+                'password'          => Hash::make($request->password),
+                'role'              => User::ROLE_CUSTOMER,
+                'account_status'    => User::STATUS_PENDING_VERIFICATION,
+                'email_verified_at' => null,
+            ]);
+        } catch (\Illuminate\Database\QueryException $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'The email has already been taken.',
+                'errors'  => [
+                    'email' => ['The email has already been taken.'],
+                ],
+            ], 422);
+        }
 
         // Issue 6-digit OTP challenge via EmailOtpService
-        $otpResult = EmailOtpService::createChallenge($user, 'registration');
+        $otpResult = EmailOtpService::createChallenge($user, EmailOtpService::PURPOSE_REGISTRATION);
+
+        if (!empty($otpResult['delivery_failed'])) {
+            if (empty($otpResult['ambiguous_timeout'])) {
+                try {
+                    EmailOtpChallenge::where('user_id', $user->id)->delete();
+                    $user->delete();
+                } catch (\Throwable $cleanupException) {
+                    Log::warning("Failed cleanup of unverified user [{$user->id}] after OTP delivery failure: " . $cleanupException->getMessage());
+                }
+
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => $otpResult['error'] ?? 'Unable to send verification email right now. Please try again shortly.',
+                ], 503);
+            }
+
+            return response()->json([
+                'status'             => 'error',
+                'ambiguous_timeout'  => true,
+                'message'            => $otpResult['error'] ?? 'Email delivery timed out. If a code arrives you may use it, or sign in to request a new code.',
+                'challenge_token'    => $otpResult['challenge_token'] ?? null,
+                'masked_email'       => $otpResult['masked_email'] ?? EmailOtpService::maskEmail($normalizedEmail),
+                'expires_in_seconds' => $otpResult['expires_in_seconds'] ?? (EmailOtpService::EXPIRATION_MINUTES * 60),
+                'resend_in_seconds'  => $otpResult['resend_in_seconds'] ?? EmailOtpService::RESEND_COOLDOWN_SECONDS,
+            ], 503);
+        }
 
         return response()->json([
             'status'             => 'verification_required',
@@ -63,6 +138,10 @@ class AuthController extends Controller
 
     public function login(Request $request)
     {
+        if (is_string($request->input('email'))) {
+            $request->merge(['email' => $this->normalizeEmail($request->input('email'))]);
+        }
+
         $validator = Validator::make($request->all(), [
             'email'    => 'required|string|email',
             'password' => 'required|string',
@@ -76,7 +155,8 @@ class AuthController extends Controller
             ], 422);
         }
 
-        $user = User::where('email', $request->email)->first();
+        $normalizedEmail = $this->normalizeEmail($request->input('email'));
+        $user = User::whereRaw('LOWER(email) = ?', [$normalizedEmail])->first();
 
         // Validate user exists and password is correct
         if (!$user || !Hash::check($request->password, $user->password)) {
@@ -121,7 +201,24 @@ class AuthController extends Controller
 
             // Check if patient email requires verification
             if ($user->account_status === User::STATUS_PENDING_VERIFICATION || $user->email_verified_at === null) {
-                $otpResult = EmailOtpService::createChallenge($user, 'email_verification');
+                $otpResult = EmailOtpService::createChallenge($user, EmailOtpService::PURPOSE_EMAIL_VERIFICATION);
+
+                if (!empty($otpResult['delivery_failed'])) {
+                    $failurePayload = [
+                        'status'            => 'error',
+                        'ambiguous_timeout' => !empty($otpResult['ambiguous_timeout']),
+                        'message'           => $otpResult['error'] ?? 'Unable to send verification email right now. Please try again shortly.',
+                    ];
+
+                    if (!empty($otpResult['ambiguous_timeout']) && !empty($otpResult['challenge_token'])) {
+                        $failurePayload['challenge_token'] = $otpResult['challenge_token'];
+                        $failurePayload['masked_email'] = $otpResult['masked_email'];
+                        $failurePayload['expires_in_seconds'] = $otpResult['expires_in_seconds'] ?? (EmailOtpService::EXPIRATION_MINUTES * 60);
+                        $failurePayload['resend_in_seconds'] = $otpResult['resend_in_seconds'] ?? EmailOtpService::RESEND_COOLDOWN_SECONDS;
+                    }
+
+                    return response()->json($failurePayload, 503);
+                }
 
                 return response()->json([
                     'status'                => 'verification_required',

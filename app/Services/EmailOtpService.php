@@ -234,41 +234,43 @@ class EmailOtpService
 
         // 2. Generate cryptographically secure 6-digit OTP
         $otp = (string) random_int(100000, 999999);
+        $otpHash = self::hashOtp($otp);
         $rawChallengeToken = Str::random(64);
 
         $now = now();
+        $expiresAt = $now->copy()->addMinutes(self::EXPIRATION_MINUTES);
         $hasColumns = self::supportsReservationColumns($user->getConnectionName());
         $challengeData = [
             'user_id'              => $user->id,
             'email'                => $user->email,
             'purpose'              => $purpose,
-            'otp_hash'             => self::hashOtp($otp),
+            'otp_hash'             => $otpHash,
             'challenge_token_hash' => self::hashChallengeToken($rawChallengeToken),
             'attempts'             => 0,
             'max_attempts'         => self::MAX_ATTEMPTS,
             'send_count'           => 1,
             'last_sent_at'         => $now,
-            'expires_at'           => $now->copy()->addMinutes(self::EXPIRATION_MINUTES),
+            'expires_at'           => $expiresAt,
             'consumed_at'          => null,
         ];
 
+        $initialHashEntry = [
+            'hash'       => $otpHash,
+            'version'    => 1,
+            'state'      => self::STATE_RESERVED,
+            'created_at' => $now->timestamp,
+            'expires_at' => $expiresAt->timestamp,
+        ];
+
         if ($hasColumns) {
-            $challengeData['delivery_state'] = self::STATE_DELIVERED;
+            $challengeData['delivery_state'] = self::STATE_RESERVED;
             $challengeData['otp_version'] = 1;
-            $challengeData['active_hashes'] = [
-                [
-                    'hash'       => self::hashOtp($otp),
-                    'version'    => 1,
-                    'state'      => self::STATE_DELIVERED,
-                    'created_at' => $now->timestamp,
-                    'expires_at' => $now->copy()->addMinutes(self::EXPIRATION_MINUTES)->timestamp,
-                ],
-            ];
+            $challengeData['active_hashes'] = [$initialHashEntry];
         }
 
         $challenge = EmailOtpChallenge::create($challengeData);
 
-        // 3. Dispatch Email (safe fallback if mail fails)
+        // 3. Dispatch Email (never mark 'delivered' until transport succeeds)
         try {
             Mail::to($user->email)->send(new EmailOtpMailable(
                 otp: $otp,
@@ -279,23 +281,53 @@ class EmailOtpService
         } catch (\Throwable $e) {
             Log::error("EmailOtpService delivery error for user [{$user->id}]: " . $e->getMessage());
 
-            if ($purpose === 'password_reset') {
-                $challenge->update(['expires_at' => now()]);
+            $isAmbiguous = self::isAmbiguousTimeoutException($e);
+            $failureState = $isAmbiguous ? self::STATE_AMBIGUOUS_TIMEOUT : self::STATE_FAILED;
+            $failureUpdate = [];
+
+            if ($purpose === self::PURPOSE_PASSWORD_RESET || !$isAmbiguous) {
+                $failureUpdate['expires_at'] = now();
             }
 
-            // We do NOT leak the error or OTP to the user, but inform calling controller
+            if ($hasColumns) {
+                $initialHashEntry['state'] = $failureState;
+                $failureUpdate['delivery_state'] = $failureState;
+                $failureUpdate['active_hashes'] = [$initialHashEntry];
+            }
+
+            if (!empty($failureUpdate)) {
+                $challenge->update($failureUpdate);
+            }
+
+            // We do NOT leak provider details or OTP to the user, but inform calling controller truthfully
             return [
-                'success'         => false,
-                'delivery_failed' => true,
-                'error'           => 'Unable to send verification email. Please check your address or try again shortly.',
-                'challenge_token' => $purpose === 'password_reset' ? null : $rawChallengeToken,
-                'masked_email'    => self::maskEmail($user->email),
+                'success'           => false,
+                'delivery_failed'   => true,
+                'ambiguous_timeout' => $isAmbiguous,
+                'challenge_id'      => (int) $challenge->id,
+                'error'             => $isAmbiguous
+                    ? 'Email delivery timed out. If a code arrives you may use it, or try again shortly.'
+                    : 'Unable to send verification email. Please check your address or try again shortly.',
+                'challenge_token'   => ($purpose === self::PURPOSE_PASSWORD_RESET || !$isAmbiguous) ? null : $rawChallengeToken,
+                'masked_email'      => self::maskEmail($user->email),
+                'expires_in_seconds' => self::EXPIRATION_MINUTES * 60,
+                'resend_in_seconds'  => self::RESEND_COOLDOWN_SECONDS,
             ];
+        }
+
+        if ($hasColumns) {
+            $initialHashEntry['state'] = self::STATE_DELIVERED;
+            $challenge->update([
+                'delivery_state' => self::STATE_DELIVERED,
+                'active_hashes'  => [$initialHashEntry],
+            ]);
         }
 
         return [
             'success'            => true,
             'delivery_failed'    => false,
+            'ambiguous_timeout'  => false,
+            'challenge_id'       => (int) $challenge->id,
             'challenge_token'    => $rawChallengeToken,
             'masked_email'       => self::maskEmail($user->email),
             'expires_in_seconds' => self::EXPIRATION_MINUTES * 60,
