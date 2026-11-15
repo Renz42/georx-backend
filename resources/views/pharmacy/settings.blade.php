@@ -20,6 +20,17 @@
             </div>
         @endif
 
+        @if($errors->any())
+            <div class="bg-red-50 border border-red-200 text-red-800 px-5 py-3.5 rounded-2xl mb-8 flex items-start shadow-2xs font-semibold text-xs sm:text-sm">
+                <i class="fas fa-exclamation-circle mr-3 mt-0.5 text-red-600 text-lg shrink-0"></i>
+                <div class="space-y-1">
+                    @foreach($errors->all() as $error)
+                        <div>{{ $error }}</div>
+                    @endforeach
+                </div>
+            </div>
+        @endif
+
         <form action="{{ route('pharmacy.settings.update') }}" method="POST" enctype="multipart/form-data" class="space-y-8">
             @csrf
             

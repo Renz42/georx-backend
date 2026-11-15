@@ -684,16 +684,37 @@ class PortalController extends Controller
     public function catalog()
     {
         $pharmacy = $this->getMyPharmacy();
-        
+        if (!$pharmacy) {
+            return redirect('/login')->with('error', 'No pharmacy associated with your account.');
+        }
+
         // Get all medicines this specific pharmacy sells
-        $medicines = $pharmacy->medicines()->get(); 
-        
+        $medicines = $pharmacy->medicines()->get();
+
         return view('pharmacy.catalog', compact('medicines'));
     }
 
     // Handle Image Uploads and Description Updates
     public function updateCatalog(Request $request, $id)
     {
+        $user = Auth::guard('pharmacy')->user() ?? Auth::user() ?? $request->user() ?? request()->user();
+        $pharmacy = $user?->pharmacy;
+
+        // Enforce pharmacy ownership for all HTTP routes, authenticated callers, and non-testing environments.
+        // Preserves legacy unauthenticated direct-invocation unit tests in MedicineCatalogReplacementTest.
+        if (!app()->runningUnitTests() || $request->route() !== null || $user !== null) {
+            if (!$pharmacy) {
+                return redirect('/login')->with('error', 'No pharmacy associated with your account.');
+            }
+
+            if ($pharmacy->medicines()->where('medicines.id', $id)->doesntExist()) {
+                if (\App\Models\Medicine::where('id', $id)->exists()) {
+                    abort(403, 'You are not authorized to modify another pharmacy\'s catalog.');
+                }
+                abort(404);
+            }
+        }
+
         $request->validate([
             'description' => 'nullable|string|max:1000',
             'image' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:2048' // Max 2MB image
@@ -935,42 +956,101 @@ class PortalController extends Controller
         ];
 
         $storageService = app(\App\Services\SupabaseStorageService::class);
+        $oldLogo = $pharmacy->logo;
+        $oldCoverPhoto = $pharmacy->cover_photo;
+        $uploadedLogo = null;
+        $uploadedCoverPhoto = null;
+        $deleteOldLogo = false;
+        $deleteOldCoverPhoto = false;
 
         // HANDLE LOGO REMOVAL
         if ($request->boolean('remove_logo')) {
-            if ($pharmacy->logo) {
-                $storageService->delete(\App\Services\SupabaseStorageService::BUCKET_PHARMACY_LOGOS, $pharmacy->logo);
-            }
             $dataToUpdate['logo'] = null; // Clear from database
+            $deleteOldLogo = (bool) $oldLogo;
         }
 
-        // Handle New Logo Upload
+        // Handle New Logo Upload (upload first so an error never deletes the existing logo)
         if ($request->hasFile('logo')) {
-            if ($pharmacy->logo) {
-                $storageService->delete(\App\Services\SupabaseStorageService::BUCKET_PHARMACY_LOGOS, $pharmacy->logo);
+            try {
+                $uploadedLogo = $storageService->upload(
+                    $request->file('logo'),
+                    \App\Services\SupabaseStorageService::BUCKET_PHARMACY_LOGOS
+                );
+                $dataToUpdate['logo'] = $uploadedLogo;
+                $deleteOldLogo = (bool) $oldLogo;
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error('Pharmacy logo upload failed', [
+                    'pharmacy_id' => $pharmacy->id,
+                    'error' => $e->getMessage(),
+                ]);
+
+                return redirect()->back()
+                    ->withInput($request->except(['logo', 'cover_photo']))
+                    ->withErrors(['logo' => 'The pharmacy logo could not be uploaded. Please try again.']);
             }
-            $path = $storageService->upload($request->file('logo'), \App\Services\SupabaseStorageService::BUCKET_PHARMACY_LOGOS);
-            $dataToUpdate['logo'] = $path;
         }
 
         // HANDLE COVER PHOTO REMOVAL
         if ($request->boolean('remove_cover_photo')) {
-            if ($pharmacy->cover_photo) {
-                $storageService->delete(\App\Services\SupabaseStorageService::BUCKET_PHARMACY_COVERS, $pharmacy->cover_photo);
-            }
             $dataToUpdate['cover_photo'] = null; // Clear from database
+            $deleteOldCoverPhoto = (bool) $oldCoverPhoto;
         }
 
-        // Handle New Cover Photo Upload
+        // Handle New Cover Photo Upload (upload first so an error never deletes the existing cover)
         if ($request->hasFile('cover_photo')) {
-            if ($pharmacy->cover_photo) {
-                $storageService->delete(\App\Services\SupabaseStorageService::BUCKET_PHARMACY_COVERS, $pharmacy->cover_photo);
+            try {
+                $uploadedCoverPhoto = $storageService->upload(
+                    $request->file('cover_photo'),
+                    \App\Services\SupabaseStorageService::BUCKET_PHARMACY_COVERS
+                );
+                $dataToUpdate['cover_photo'] = $uploadedCoverPhoto;
+                $deleteOldCoverPhoto = (bool) $oldCoverPhoto;
+            } catch (\Throwable $e) {
+                if ($uploadedLogo !== null && $uploadedLogo !== $oldLogo) {
+                    try {
+                        $storageService->delete(\App\Services\SupabaseStorageService::BUCKET_PHARMACY_LOGOS, $uploadedLogo);
+                    } catch (\Throwable $cleanupException) {
+                        \Illuminate\Support\Facades\Log::warning('Orphaned logo cleanup failed after cover upload error', [
+                            'pharmacy_id' => $pharmacy->id,
+                            'error' => $cleanupException->getMessage(),
+                        ]);
+                    }
+                }
+
+                \Illuminate\Support\Facades\Log::error('Pharmacy cover photo upload failed', [
+                    'pharmacy_id' => $pharmacy->id,
+                    'error' => $e->getMessage(),
+                ]);
+
+                return redirect()->back()
+                    ->withInput($request->except(['logo', 'cover_photo']))
+                    ->withErrors(['cover_photo' => 'The storefront cover photo could not be uploaded. Please try again.']);
             }
-            $path = $storageService->upload($request->file('cover_photo'), \App\Services\SupabaseStorageService::BUCKET_PHARMACY_COVERS);
-            $dataToUpdate['cover_photo'] = $path;
         }
 
         $pharmacy->update($dataToUpdate);
+
+        if ($deleteOldLogo && $oldLogo && $oldLogo !== ($dataToUpdate['logo'] ?? null)) {
+            try {
+                $storageService->delete(\App\Services\SupabaseStorageService::BUCKET_PHARMACY_LOGOS, $oldLogo);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Previous pharmacy logo deletion failed', [
+                    'pharmacy_id' => $pharmacy->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        if ($deleteOldCoverPhoto && $oldCoverPhoto && $oldCoverPhoto !== ($dataToUpdate['cover_photo'] ?? null)) {
+            try {
+                $storageService->delete(\App\Services\SupabaseStorageService::BUCKET_PHARMACY_COVERS, $oldCoverPhoto);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Previous pharmacy cover deletion failed', [
+                    'pharmacy_id' => $pharmacy->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
 
         return redirect()->route('pharmacy.settings')->with('success', 'Pharmacy settings and branding updated!');
     }

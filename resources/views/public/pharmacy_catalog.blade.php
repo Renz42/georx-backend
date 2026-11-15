@@ -61,8 +61,8 @@
     <div class="bg-white border-b border-slate-200 shadow-sm relative overflow-hidden">
         
         <div class="absolute inset-0 opacity-[0.08] pointer-events-none">
-            @if($pharmacy->cover_photo)
-                <img src="/storage/{{ $pharmacy->cover_photo }}" class="w-full h-full object-cover blur-md">
+            @if($pharmacy->cover_photo_url)
+                <img src="{{ $pharmacy->cover_photo_url }}" class="w-full h-full object-cover blur-md">
             @else
                 <div class="w-full h-full bg-slate-200"></div>
             @endif
@@ -75,8 +75,8 @@
                     <div class="w-24 h-24 sm:w-28 sm:h-28 rounded-full border-4 border-white shadow-xl overflow-hidden shrink-0 bg-white flex items-center justify-center text-4xl sm:text-5xl"
                          style="color: {{ $pharmacy->theme_color ?? '#2563eb' }};">
                         <div class="w-full h-full bg-slate-100 flex items-center justify-center">
-                        @if($pharmacy->cover_photo)
-                            <img src="/storage/{{ $pharmacy->cover_photo }}" alt="Storefront" class="w-full h-full object-cover">
+                        @if($pharmacy->cover_photo_url)
+                            <img src="{{ $pharmacy->cover_photo_url }}" alt="Storefront" class="w-full h-full object-cover">
                         @else
                             <i class="fas fa-clinic-medical"></i>
                         @endif
@@ -148,8 +148,8 @@
                     <a href="#" class="absolute inset-0 z-0"></a>
                     
                     <div class="h-48 sm:h-56 bg-slate-50 relative flex items-center justify-center p-6 border-b border-slate-100 overflow-hidden">
-                        @if($medicine->image)
-                            <img src="/storage/{{ $medicine->image }}" alt="Medicine" class="w-full h-full object-contain mix-blend-multiply group-hover:scale-110 transition-transform duration-500">
+                        @if($medicine->image_url)
+                            <img src="{{ $medicine->image_url }}" alt="Medicine" class="w-full h-full object-contain mix-blend-multiply group-hover:scale-110 transition-transform duration-500">
                         @else
                             <i class="fas fa-pills text-7xl text-slate-200 group-hover:text-blue-200 transition-colors duration-300"></i>
                         @endif

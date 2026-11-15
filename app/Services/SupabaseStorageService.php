@@ -35,18 +35,117 @@ class SupabaseStorageService
         self::BUCKET_PROFILE_IMAGES,
     ];
 
+    /** Allowed MIME types for managed image buckets */
+    public const ALLOWED_IMAGE_MIMES = [
+        'image/jpeg',
+        'image/jpg',
+        'image/pjpeg',
+        'image/png',
+        'image/webp',
+        'image/gif',
+    ];
+
+    /** Allowed canonical image extensions */
+    public const ALLOWED_IMAGE_EXTENSIONS = [
+        'jpg',
+        'jpeg',
+        'png',
+        'webp',
+        'gif',
+    ];
+
+    /** Default HTTP timeouts (seconds) for Supabase Storage API requests */
+    private const CONNECT_TIMEOUT_SECONDS = 10;
+    private const REQUEST_TIMEOUT_SECONDS = 30;
+
     private ?string $supabaseUrl;
     private ?string $serviceKey;
+    private string $keySource = 'none';
+
+    /** @var array<int, string> */
+    private array $rejectedKeySources = [];
 
     public function __construct(?string $url = null, ?string $key = null)
     {
-        $this->supabaseUrl = rtrim((string) ($url ?? config('services.supabase.url', '')), '/');
+        $rawUrl = $url ?? config('services.supabase.url');
+        $this->supabaseUrl = self::normalizeSupabaseUrl(is_string($rawUrl) ? $rawUrl : null);
+
+        if (is_string($rawUrl) && trim($rawUrl) !== '' && $this->supabaseUrl === null) {
+            Log::warning('Supabase storage configuration contains a malformed SUPABASE_URL; cloud storage base URL disabled.');
+        }
 
         if ($key !== null) {
-            $this->serviceKey = self::isValidServerKey($key) ? trim($key) : null;
+            $trimmedKey = trim($key);
+            if ($trimmedKey !== '' && self::isValidServerKey($trimmedKey)) {
+                $this->serviceKey = $trimmedKey;
+                $this->keySource = 'explicit';
+            } else {
+                $this->serviceKey = null;
+                $this->keySource = 'none';
+                if ($trimmedKey !== '') {
+                    $this->rejectedKeySources = ['explicit'];
+                }
+            }
         } else {
-            $this->serviceKey = self::resolveServerCredential();
+            $resolved = self::resolveServerCredentialWithDiagnostics();
+            $this->serviceKey = $resolved['key'];
+            $this->keySource = $resolved['source'];
+            $this->rejectedKeySources = $resolved['rejected_sources'];
         }
+    }
+
+    /**
+     * Validate and normalize a Supabase base URL (must be http/https with a valid host).
+     */
+    public static function normalizeSupabaseUrl(?string $url): ?string
+    {
+        if ($url === null) {
+            return null;
+        }
+
+        $trimmed = rtrim(trim($url), '/');
+        if ($trimmed === '' || filter_var($trimmed, FILTER_VALIDATE_URL) === false) {
+            return null;
+        }
+
+        $parts = parse_url($trimmed);
+        $scheme = strtolower((string) ($parts['scheme'] ?? ''));
+        $host = (string) ($parts['host'] ?? '');
+
+        if (!in_array($scheme, ['http', 'https'], true) || $host === '') {
+            return null;
+        }
+
+        return $trimmed;
+    }
+
+    /**
+     * Determine whether cloud storage URL and privileged server credential are both ready.
+     */
+    public function isConfigured(): bool
+    {
+        return !empty($this->supabaseUrl) && !empty($this->serviceKey);
+    }
+
+    /**
+     * Return safe, non-secret configuration diagnostics for logging and verification.
+     *
+     * @return array<string, mixed>
+     */
+    public function diagnoseConfiguration(): array
+    {
+        return [
+            'environment' => app()->environment(),
+            'has_valid_url' => !empty($this->supabaseUrl),
+            'url_scheme' => $this->supabaseUrl ? parse_url($this->supabaseUrl, PHP_URL_SCHEME) : null,
+            'has_server_key' => !empty($this->serviceKey),
+            'key_source' => $this->keySource,
+            'key_type' => $this->serviceKey
+                ? (self::isJwt($this->serviceKey) ? 'service_role_jwt' : 'secret_key')
+                : 'none',
+            'rejected_key_sources' => $this->rejectedKeySources,
+            'is_configured' => $this->isConfigured(),
+        ];
     }
 
     /**
@@ -55,32 +154,58 @@ class SupabaseStorageService
      * Supported order:
      * 1. config('services.supabase.secret_key')
      * 2. config('services.supabase.service_role_key')
-     * 3. config('services.supabase.key') - ONLY if explicitly validated as a server-side secret
+     * 3. config('services.supabase.service_key')
+     * 4. config('services.supabase.key') - ONLY if explicitly validated as a server-side secret
      *
      * Publishable and anon keys are NEVER selected.
      */
     public static function resolveServerCredential(): ?string
     {
-        // 1. SUPABASE_SECRET_KEY
-        $secretKey = config('services.supabase.secret_key');
-        if (!empty($secretKey) && self::isValidServerKey($secretKey)) {
-            return trim($secretKey);
+        return self::resolveServerCredentialWithDiagnostics()['key'];
+    }
+
+    /**
+     * Resolve privileged server credential together with safe key-source diagnostics.
+     *
+     * @return array{key: ?string, source: string, rejected_sources: array<int, string>}
+     */
+    private static function resolveServerCredentialWithDiagnostics(): array
+    {
+        $candidates = [
+            'secret_key' => config('services.supabase.secret_key'),
+            'service_role_key' => config('services.supabase.service_role_key'),
+            'service_key' => config('services.supabase.service_key'),
+            'key' => config('services.supabase.key'),
+        ];
+
+        $rejectedSources = [];
+
+        foreach ($candidates as $source => $value) {
+            if (!is_string($value)) {
+                continue;
+            }
+
+            $trimmed = trim($value);
+            if ($trimmed === '') {
+                continue;
+            }
+
+            if (self::isValidServerKey($trimmed)) {
+                return [
+                    'key' => $trimmed,
+                    'source' => $source,
+                    'rejected_sources' => $rejectedSources,
+                ];
+            }
+
+            $rejectedSources[] = $source;
         }
 
-        // 2. Legacy server-side service-role keys
-        $serviceRoleKey = config('services.supabase.service_role_key');
-        if (!empty($serviceRoleKey) && self::isValidServerKey($serviceRoleKey)) {
-            return trim($serviceRoleKey);
-        }
-
-        // 3. Ambiguous SUPABASE_KEY - only trusted if explicitly validated
-        $genericKey = config('services.supabase.key');
-        if (!empty($genericKey) && self::isValidServerKey($genericKey)) {
-            return trim($genericKey);
-        }
-
-        // Fails closed if no acceptable server-side credential is found
-        return null;
+        return [
+            'key' => null,
+            'source' => 'none',
+            'rejected_sources' => $rejectedSources,
+        ];
     }
 
     /**
@@ -174,23 +299,47 @@ class SupabaseStorageService
             throw new \InvalidArgumentException("Invalid Supabase bucket: {$bucket}");
         }
 
-        // Generate unique filename
-        $extension = $file->getClientOriginalExtension() ?: 'png';
-        $filename = Str::uuid()->toString() . '.' . strtolower($extension);
-        $path = $folder ? trim($folder, '/') . '/' . $filename : $filename;
+        $imageMeta = $this->resolveValidatedImageMeta($file);
+
+        $cleanFolder = null;
+        if ($folder !== null) {
+            if (str_contains($folder, '..')) {
+                throw new \InvalidArgumentException('Invalid storage folder path.');
+            }
+            $trimmedFolder = trim($folder, '/');
+            $cleanFolder = $trimmedFolder !== '' ? $trimmedFolder : null;
+        }
+
+        // Generate unique canonical filename
+        $filename = Str::uuid()->toString() . '.' . $imageMeta['extension'];
+        $path = $cleanFolder !== null ? "{$cleanFolder}/{$filename}" : $filename;
 
         $isProduction = app()->environment('production');
 
         // Fail safely in production if credentials are missing or unprivileged
         if (empty($this->supabaseUrl) || empty($this->serviceKey)) {
             if ($isProduction) {
-                Log::error("Supabase Storage configuration missing or unprivileged in production for bucket {$bucket}.");
+                Log::error(
+                    "Supabase Storage configuration missing or unprivileged in production for bucket {$bucket}.",
+                    $this->diagnoseConfiguration()
+                );
                 throw new \RuntimeException("Cloud storage service is not configured with valid server credentials in production.");
             }
 
             // Local fallback permitted ONLY in non-production environments when Supabase is unconfigured
             Log::info("Supabase credentials not configured in local environment; saving to local public disk.");
-            return $file->storeAs("{$bucket}" . ($folder ? "/{$folder}" : ""), $filename, 'public');
+            return $file->storeAs("{$bucket}" . ($cleanFolder !== null ? "/{$cleanFolder}" : ""), $filename, 'public');
+        }
+
+        // Verify temp file readability before transmitting to Supabase Storage
+        $realPath = $file->getRealPath();
+        if (empty($realPath) || !is_file($realPath)) {
+            throw new \RuntimeException('Uploaded image file could not be located on disk.');
+        }
+
+        $contents = @file_get_contents($realPath);
+        if ($contents === false) {
+            throw new \RuntimeException('Failed to read uploaded image file contents.');
         }
 
         // Upload directly to Supabase Storage REST API
@@ -202,7 +351,9 @@ class SupabaseStorageService
             ]);
 
             $response = Http::withHeaders($headers)
-                ->withBody(file_get_contents($file->getRealPath()), $file->getMimeType())
+                ->connectTimeout(self::CONNECT_TIMEOUT_SECONDS)
+                ->timeout(self::REQUEST_TIMEOUT_SECONDS)
+                ->withBody($contents, $imageMeta['mime'])
                 ->post($endpoint);
 
             if ($response->successful()) {
@@ -210,8 +361,8 @@ class SupabaseStorageService
             }
 
             $status = $response->status();
-            $body = $response->body();
-            Log::error("Supabase storage upload failed with HTTP {$status} for bucket {$bucket}: {$body}");
+            $bodySummary = Str::limit(trim((string) $response->body()), 300);
+            Log::error("Supabase storage upload failed with HTTP {$status} for bucket {$bucket}: {$bodySummary}");
 
             if ($isProduction) {
                 throw new \RuntimeException("Failed to upload image to cloud storage (HTTP {$status}).");
@@ -229,7 +380,77 @@ class SupabaseStorageService
 
         // Non-production fallback to local disk
         Log::warning("Supabase storage upload failed in non-production; falling back to local public disk.");
-        return $file->storeAs("{$bucket}" . ($folder ? "/{$folder}" : ""), $filename, 'public');
+        return $file->storeAs("{$bucket}" . ($cleanFolder !== null ? "/{$cleanFolder}" : ""), $filename, 'public');
+    }
+
+    /**
+     * Validate an uploaded image's integrity, MIME type, and canonical extension.
+     *
+     * @return array{mime: string, extension: string}
+     */
+    private function resolveValidatedImageMeta(UploadedFile $file): array
+    {
+        if (!$file->isValid()) {
+            throw new \RuntimeException('The uploaded image file is invalid or incomplete.');
+        }
+
+        $realPath = $file->getRealPath();
+        if (empty($realPath) || !is_file($realPath)) {
+            throw new \RuntimeException('Uploaded image file could not be located on disk.');
+        }
+
+        $detectedMime = '';
+        try {
+            $detectedMime = strtolower((string) ($file->getMimeType() ?: ''));
+        } catch (\Throwable) {
+            // Fall back to byte-level finfo when OS/ACL checks prevent Symfony FileinfoMimeTypeGuesser from reading tmp paths.
+            if (function_exists('finfo_open')) {
+                $probeBytes = @file_get_contents($realPath, false, null, 0, 8192);
+                if ($probeBytes !== false && $probeBytes !== '') {
+                    $finfo = @finfo_open(FILEINFO_MIME_TYPE);
+                    if ($finfo !== false) {
+                        $finfoMime = @finfo_buffer($finfo, $probeBytes);
+                        @finfo_close($finfo);
+                        if (is_string($finfoMime)) {
+                            $detectedMime = strtolower($finfoMime);
+                        }
+                    }
+                }
+            }
+        }
+
+        $clientMime = strtolower((string) ($file->getClientMimeType() ?: ''));
+        $clientExt = strtolower((string) $file->getClientOriginalExtension());
+
+        if ($detectedMime !== '' && !in_array($detectedMime, ['application/octet-stream', 'application/x-empty'], true)) {
+            if (!in_array($detectedMime, self::ALLOWED_IMAGE_MIMES, true)) {
+                throw new \InvalidArgumentException("Unsupported image MIME type: {$detectedMime}");
+            }
+            $resolvedMime = $detectedMime;
+        } else {
+            if (!in_array($clientMime, self::ALLOWED_IMAGE_MIMES, true)) {
+                throw new \InvalidArgumentException('Uploaded file must have a supported image MIME type.');
+            }
+            if ($clientExt !== '' && !in_array($clientExt, self::ALLOWED_IMAGE_EXTENSIONS, true)) {
+                throw new \InvalidArgumentException("Unsupported image file extension: {$clientExt}");
+            }
+            $resolvedMime = $clientMime;
+        }
+
+        $canonicalExt = match ($resolvedMime) {
+            'image/jpeg', 'image/pjpeg', 'image/jpg' => 'jpg',
+            'image/png' => 'png',
+            'image/webp' => 'webp',
+            'image/gif' => 'gif',
+            default => 'png',
+        };
+
+        $extension = in_array($clientExt, self::ALLOWED_IMAGE_EXTENSIONS, true) ? $clientExt : $canonicalExt;
+
+        return [
+            'mime' => $resolvedMime,
+            'extension' => $extension,
+        ];
     }
 
     /**
@@ -373,15 +594,19 @@ class SupabaseStorageService
 
                 $headers = $this->buildAuthHeaders($this->serviceKey);
 
-                $response = Http::withHeaders($headers)->delete($endpoint, [
-                    'prefixes' => [$canonicalKey]
-                ]);
+                $response = Http::withHeaders($headers)
+                    ->connectTimeout(self::CONNECT_TIMEOUT_SECONDS)
+                    ->timeout(self::REQUEST_TIMEOUT_SECONDS)
+                    ->delete($endpoint, [
+                        'prefixes' => [$canonicalKey],
+                    ]);
 
                 if ($response->successful()) {
                     return true;
                 }
 
-                Log::error("Supabase Storage Delete failed with HTTP {$response->status()} for bucket {$bucket}: " . $response->body());
+                $bodySummary = Str::limit(trim((string) $response->body()), 300);
+                Log::error("Supabase Storage Delete failed with HTTP {$response->status()} for bucket {$bucket}: {$bodySummary}");
                 return false;
             } catch (\Throwable $e) {
                 Log::error("Supabase Storage Delete Exception: " . $e->getMessage());

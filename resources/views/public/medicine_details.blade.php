@@ -57,8 +57,8 @@
 
         <div class="bg-white rounded-3xl shadow-[0_4px_20px_rgba(191,232,214,0.3)] border border-geo-400 overflow-hidden mb-8 flex flex-col md:flex-row items-center p-2 gap-4">
             <div class="w-full md:w-48 h-32 relative bg-geo-100 rounded-2xl overflow-hidden shrink-0 border border-geo-400/50">
-                @if($pharmacy->cover_photo)
-                    <img src="/storage/{{ $pharmacy->cover_photo }}" alt="Storefront" class="w-full h-full object-cover opacity-90">
+                @if($pharmacy->cover_photo_url)
+                    <img src="{{ $pharmacy->cover_photo_url }}" alt="Storefront" class="w-full h-full object-cover opacity-90">
                 @else
                     <iframe width="100%" height="100%" frameborder="0" style="border:0; pointer-events: none;" src="https://maps.google.com/maps?q={{ $pharmacy->latitude }},{{ $pharmacy->longitude }}&t=k&z=19&ie=UTF8&iwloc=&output=embed"></iframe>
                 @endif
@@ -83,8 +83,8 @@
                 <div class="flex flex-col sm:flex-row gap-8 items-start">
                     <div class="w-full sm:w-64 h-64 bg-white rounded-3xl border border-geo-400 shadow-sm flex flex-col items-center justify-center shrink-0 p-6 relative overflow-hidden">
                         <div class="absolute inset-0 bg-gradient-to-br from-geo-100/50 to-transparent"></div>
-                        @if($medicine->image)
-                            <img src="/storage/{{ $medicine->image }}" alt="Medicine" class="w-full h-full object-contain mix-blend-multiply relative z-10 hover:scale-110 transition-transform duration-500">
+                        @if($medicine->image_url)
+                            <img src="{{ $medicine->image_url }}" alt="Medicine" class="w-full h-full object-contain mix-blend-multiply relative z-10 hover:scale-110 transition-transform duration-500">
                         @else
                             <i class="fas fa-pills text-6xl mb-3 text-geo-500/30 relative z-10"></i>
                             <span class="text-[10px] font-bold uppercase tracking-widest text-geo-600/50 relative z-10">No Photo</span>
@@ -328,8 +328,8 @@
                         @endif
 
                         <div class="h-36 bg-geo-50 rounded-xl mb-4 flex items-center justify-center p-3 border border-geo-100 relative">
-                            @if($item->image)
-                                <img src="/storage/{{ $item->image }}" alt="{{ $item->generic_name }}" class="h-full object-contain mix-blend-multiply group-hover:scale-110 transition-transform duration-500">
+                            @if($item->image_url)
+                                <img src="{{ $item->image_url }}" alt="{{ $item->generic_name }}" class="h-full object-contain mix-blend-multiply group-hover:scale-110 transition-transform duration-500">
                             @else
                                 <i class="fas fa-pills text-3xl text-geo-500/30"></i>
                             @endif

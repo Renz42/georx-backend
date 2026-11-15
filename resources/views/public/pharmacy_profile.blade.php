@@ -41,8 +41,8 @@
     <!-- Cover + Logo Header -->
     <div class="relative">
         <div class="h-48 sm:h-64 w-full overflow-hidden" style="background: linear-gradient(135deg, {{ $pharmacy->theme_color ?? '#2563eb' }}dd, {{ $pharmacy->theme_color ?? '#2563eb' }}99);">
-            @if($pharmacy->cover_photo)
-                <img src="{{ asset('storage/' . $pharmacy->cover_photo) }}" class="w-full h-full object-cover opacity-80" alt="Cover photo">
+            @if($pharmacy->cover_photo_url)
+                <img src="{{ $pharmacy->cover_photo_url }}" class="w-full h-full object-cover opacity-80" alt="Cover photo">
             @else
                 <div class="absolute inset-0 opacity-10">
                     <div class="absolute top-0 right-0 w-80 h-80 bg-white rounded-full -translate-y-1/2 translate-x-1/3"></div>
@@ -54,8 +54,8 @@
         <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative">
             <div class="flex flex-col sm:flex-row items-center sm:items-end gap-4 -mt-16 sm:-mt-12">
                 <div class="w-28 h-28 sm:w-32 sm:h-32 rounded-3xl bg-white shadow-xl border-4 border-white overflow-hidden shrink-0 flex items-center justify-center">
-                    @if($pharmacy->logo)
-                        <img src="{{ asset('storage/' . $pharmacy->logo) }}" class="w-full h-full object-cover" alt="{{ $pharmacy->name }}">
+                    @if($pharmacy->logo_url)
+                        <img src="{{ $pharmacy->logo_url }}" class="w-full h-full object-cover" alt="{{ $pharmacy->name }}">
                     @else
                         <i class="fas fa-clinic-medical text-4xl" style="color: {{ $pharmacy->theme_color ?? '#2563eb' }}"></i>
                     @endif

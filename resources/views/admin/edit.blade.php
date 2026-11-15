@@ -183,9 +183,9 @@
 
                     <div class="md:col-span-2 mt-4">
                         <label class="block text-sm font-semibold text-slate-600 mb-2">Storefront Image / Cover Photo (Optional)</label>
-                        @if($pharmacy->cover_photo)
+                        @if($pharmacy->cover_photo_url)
                             <div class="mb-3">
-                                <img src="/storage/{{ $pharmacy->cover_photo }}" alt="Current Image" class="h-32 rounded-lg border border-slate-200">
+                                <img src="{{ $pharmacy->cover_photo_url }}" alt="Current Image" class="h-32 rounded-lg border border-slate-200">
                             </div>
                         @endif
                         <input type="file" name="cover_photo" accept="image/*"

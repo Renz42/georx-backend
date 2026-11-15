@@ -34,6 +34,9 @@ RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/apache2.
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 RUN chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
+# Ensure PHP upload limit exceeds Laravel's 2MB catalog image validation so clear validation errors are returned
+RUN printf "upload_max_filesize=5M\npost_max_size=10M\n" > /usr/local/etc/php/conf.d/georx-uploads.ini
+
 # Expose HTTP port
 EXPOSE 80
 

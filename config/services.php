@@ -43,12 +43,14 @@ return [
     ],
 
     'supabase' => [
-        'url' => env('SUPABASE_URL'),
-        'secret_key' => env('SUPABASE_SECRET_KEY'),
-        'service_role_key' => env('SUPABASE_SERVICE_ROLE_KEY', env('SUPABASE_SERVICE_KEY')),
-        'key' => env('SUPABASE_KEY'),
-        'anon_key' => env('SUPABASE_ANON_KEY'),
-        'publishable_key' => env('SUPABASE_PUBLISHABLE_KEY'),
+        'url' => rtrim(trim((string) env('SUPABASE_URL', '')), '/') ?: null,
+        'secret_key' => trim((string) env('SUPABASE_SECRET_KEY', '')) ?: null,
+        'service_role_key' => trim((string) env('SUPABASE_SERVICE_ROLE_KEY', ''))
+            ?: (trim((string) env('SUPABASE_SERVICE_KEY', '')) ?: null),
+        'service_key' => trim((string) env('SUPABASE_SERVICE_KEY', '')) ?: null,
+        'key' => trim((string) env('SUPABASE_KEY', '')) ?: null,
+        'anon_key' => trim((string) env('SUPABASE_ANON_KEY', '')) ?: null,
+        'publishable_key' => trim((string) env('SUPABASE_PUBLISHABLE_KEY', '')) ?: null,
     ],
 
 ];

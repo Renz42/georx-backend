@@ -209,6 +209,7 @@ class MedicineImageUrlTest extends TestCase
         Config::set('services.supabase.url', '');
         Config::set('services.supabase.secret_key', '');
         Config::set('services.supabase.service_role_key', '');
+        Config::set('services.supabase.service_key', '');
         Config::set('services.supabase.key', '');
 
         $file = UploadedFile::fake()->create('fail.png', 10, 'image/png');
@@ -262,6 +263,7 @@ class MedicineImageUrlTest extends TestCase
     {
         $jwt = $this->makeJwt(['role' => 'service_role', 'sub' => '12345']);
         Config::set('services.supabase.secret_key', null);
+        Config::set('services.supabase.service_key', null);
         Config::set('services.supabase.service_role_key', $jwt);
 
         $resolved = SupabaseStorageService::resolveServerCredential();
@@ -279,6 +281,7 @@ class MedicineImageUrlTest extends TestCase
         $anonJwt = $this->makeJwt(['role' => 'anon']);
         Config::set('services.supabase.secret_key', null);
         Config::set('services.supabase.service_role_key', null);
+        Config::set('services.supabase.service_key', null);
         Config::set('services.supabase.key', null);
         Config::set('services.supabase.anon_key', $anonJwt);
         Config::set('services.supabase.publishable_key', 'sb_publishable_client_123');
@@ -298,6 +301,7 @@ class MedicineImageUrlTest extends TestCase
     {
         Config::set('services.supabase.secret_key', null);
         Config::set('services.supabase.service_role_key', null);
+        Config::set('services.supabase.service_key', null);
 
         // Case A: Unvalidated generic string
         Config::set('services.supabase.key', 'ambiguous_untrusted_token_12345');
@@ -322,6 +326,7 @@ class MedicineImageUrlTest extends TestCase
         Config::set('services.supabase.url', 'https://mock.supabase.co');
         Config::set('services.supabase.secret_key', null);
         Config::set('services.supabase.service_role_key', null);
+        Config::set('services.supabase.service_key', null);
         Config::set('services.supabase.key', null);
 
         Storage::fake('public');

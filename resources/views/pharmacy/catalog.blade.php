@@ -13,9 +13,23 @@
         </div>
 
         @if(session('success'))
-            <div class="bg-emerald-50 border border-emerald-200 text-emerald-800 px-5 py-3.5 rounded-2xl mb-8 flex items-center shadow-2xs font-bold text-xs sm:text-sm">
+            <div class="bg-emerald-50 border border-emerald-200 text-emerald-800 px-5 py-3.5 rounded-2xl mb-6 flex items-center shadow-2xs font-bold text-xs sm:text-sm">
                 <i class="fas fa-check-circle mr-3 text-emerald-600 text-lg"></i>
                 {{ session('success') }}
+            </div>
+        @endif
+
+        @if(session('warning'))
+            <div class="bg-amber-50 border border-amber-200 text-amber-800 px-5 py-3.5 rounded-2xl mb-6 flex items-center shadow-2xs font-bold text-xs sm:text-sm">
+                <i class="fas fa-exclamation-triangle mr-3 text-amber-600 text-lg"></i>
+                <span>{{ session('warning') }}</span>
+            </div>
+        @endif
+
+        @if(session('error'))
+            <div class="bg-rose-50 border border-rose-200 text-rose-800 px-5 py-3.5 rounded-2xl mb-6 flex items-center shadow-2xs font-bold text-xs sm:text-sm">
+                <i class="fas fa-exclamation-circle mr-3 text-rose-600 text-lg"></i>
+                <span>{{ session('error') }}</span>
             </div>
         @endif
 
@@ -30,26 +44,32 @@
             </div>
         @endif
 
+        <div id="catalogUploadClientError" class="hidden bg-rose-50 border border-rose-200 text-rose-800 px-5 py-3.5 rounded-2xl mb-6 flex items-center shadow-2xs font-bold text-xs sm:text-sm" role="alert">
+            <i class="fas fa-exclamation-circle mr-3 text-rose-600 text-lg"></i>
+            <span id="catalogUploadClientErrorText"></span>
+        </div>
+
         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             @forelse($medicines as $medicine)
                 <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden flex flex-col hover:shadow-sm transition-shadow">
                     
-                    <form action="{{ route('pharmacy.catalog.update', $medicine->id) }}" method="POST" enctype="multipart/form-data" class="flex flex-col h-full">
+                    <form action="{{ (request()->routeIs('portal.*') || request()->is('portal/*')) ? route('portal.catalog.update', $medicine->id) : route('pharmacy.catalog.update', $medicine->id) }}" method="POST" enctype="multipart/form-data" class="flex flex-col h-full">
                         @csrf
                         
                         <div class="h-48 bg-slate-50 border-b border-slate-100 relative group flex items-center justify-center">
                             @if($medicine->image_url)
                                 <img src="{{ $medicine->image_url }}" alt="{{ $medicine->generic_name ?? 'Medicine Photo' }}" class="w-full h-full object-cover">
                             @else
-                                <div class="text-center opacity-50 group-hover:opacity-100 transition-opacity">
+                                <div class="text-center opacity-60 group-hover:opacity-100 transition-opacity">
                                     <i class="fas fa-camera text-3xl text-slate-400 mb-2 block"></i>
-                                    <span class="text-[10px] font-bold uppercase tracking-widest text-slate-500">No Photo</span>
+                                    <span class="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">No Photo</span>
+                                    <span class="text-[10px] font-medium text-slate-400 mt-1 block">JPG, PNG, WEBP &bull; Max 2MB</span>
                                 </div>
                             @endif
                             
-                            <input type="file" id="image_{{ $medicine->id }}" name="image" accept="image/*" class="hidden" onchange="this.form.submit()">
+                            <input type="file" id="image_{{ $medicine->id }}" name="image" accept="image/jpeg,image/png,image/webp" class="hidden" onchange="handleCatalogImageSelect(this)">
                             
-                            <label for="image_{{ $medicine->id }}" class="absolute bottom-3 right-3 bg-[#0D7A5F] hover:bg-[#0B6E53] text-white w-9 h-9 rounded-full flex items-center justify-center cursor-pointer shadow-sm transition-all active:scale-95" title="Upload New Photo">
+                            <label for="image_{{ $medicine->id }}" id="upload_label_{{ $medicine->id }}" class="absolute bottom-3 right-3 bg-[#0D7A5F] hover:bg-[#0B6E53] text-white w-9 h-9 rounded-full flex items-center justify-center cursor-pointer shadow-sm transition-all active:scale-95" title="Upload New Photo (JPG, PNG, WEBP, Max 2MB)">
                                 <i class="fas fa-upload text-xs"></i>
                             </label>
                         </div>
@@ -86,3 +106,60 @@
 
     </div>
 @endsection
+
+@push('scripts')
+<script>
+    function showCatalogUploadError(message) {
+        const box = document.getElementById('catalogUploadClientError');
+        const text = document.getElementById('catalogUploadClientErrorText');
+        if (box && text) {
+            text.textContent = message;
+            box.classList.remove('hidden');
+            box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }
+
+    function handleCatalogImageSelect(input) {
+        if (!input || !input.files || !input.files.length) {
+            return;
+        }
+
+        const file = input.files[0];
+        const form = input.form;
+        if (!form || form.dataset.uploading === '1') {
+            return;
+        }
+
+        const maxBytes = 2 * 1024 * 1024; // Matches backend max:2048 (2MB)
+        const allowedMimes = ['image/jpeg', 'image/pjpeg', 'image/png', 'image/webp'];
+        const ext = (file.name.split('.').pop() || '').toLowerCase();
+        const allowedExts = ['jpg', 'jpeg', 'png', 'webp'];
+
+        if ((file.type && !allowedMimes.includes(file.type.toLowerCase())) || !allowedExts.includes(ext)) {
+            input.value = '';
+            showCatalogUploadError('Please select a valid JPG, PNG, or WEBP medicine photo.');
+            return;
+        }
+
+        if (file.size > maxBytes) {
+            input.value = '';
+            showCatalogUploadError('Medicine photo exceeds the 2MB limit. Please choose a smaller image.');
+            return;
+        }
+
+        const errorBox = document.getElementById('catalogUploadClientError');
+        if (errorBox) {
+            errorBox.classList.add('hidden');
+        }
+
+        form.dataset.uploading = '1';
+        const label = document.querySelector('label[for="' + input.id + '"]');
+        if (label) {
+            label.classList.add('opacity-70', 'pointer-events-none');
+            label.innerHTML = '<i class="fas fa-spinner fa-spin text-xs"></i>';
+        }
+
+        form.submit();
+    }
+</script>
+@endpush

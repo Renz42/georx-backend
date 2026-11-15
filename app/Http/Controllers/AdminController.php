@@ -252,15 +252,42 @@ class AdminController extends Controller
             ],
         ];
 
+        $oldCoverPhoto = $pharmacy->cover_photo;
+        $uploadedCoverPhoto = null;
+
         if ($request->hasFile('cover_photo')) {
             $storageService = app(\App\Services\SupabaseStorageService::class);
-            if ($pharmacy->cover_photo) {
-                $storageService->delete(\App\Services\SupabaseStorageService::BUCKET_PHARMACY_COVERS, $pharmacy->cover_photo);
+
+            try {
+                $uploadedCoverPhoto = $storageService->upload(
+                    $request->file('cover_photo'),
+                    \App\Services\SupabaseStorageService::BUCKET_PHARMACY_COVERS
+                );
+                $data['cover_photo'] = $uploadedCoverPhoto;
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error('Admin pharmacy cover upload failed', [
+                    'pharmacy_id' => $pharmacy->id,
+                    'error' => $e->getMessage(),
+                ]);
+
+                return redirect()->back()
+                    ->withInput($request->except(['cover_photo']))
+                    ->withErrors(['cover_photo' => 'The storefront cover photo could not be uploaded. Please try again.']);
             }
-            $data['cover_photo'] = $storageService->upload($request->file('cover_photo'), \App\Services\SupabaseStorageService::BUCKET_PHARMACY_COVERS);
         }
 
         $pharmacy->update($data);
+
+        if ($uploadedCoverPhoto !== null && $oldCoverPhoto && $oldCoverPhoto !== $uploadedCoverPhoto) {
+            try {
+                $storageService->delete(\App\Services\SupabaseStorageService::BUCKET_PHARMACY_COVERS, $oldCoverPhoto);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Previous admin pharmacy cover deletion failed', [
+                    'pharmacy_id' => $pharmacy->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
 
         return redirect()->route('admin.pharmacies')->with('success', 'Pharmacy updated successfully!');
     }

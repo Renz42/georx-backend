@@ -66,8 +66,8 @@
                         <div class="p-6 flex items-center justify-between">
                             <div class="flex items-center gap-4">
                                 <div class="w-16 h-16 bg-slate-50 rounded-xl flex items-center justify-center shrink-0 border border-slate-100 p-2">
-                                    @if($item->medicine->image)
-                                        <img src="/storage/{{ $item->medicine->image }}" class="w-full h-full object-contain mix-blend-multiply">
+                                    @if($item->medicine?->image_url)
+                                        <img src="{{ $item->medicine->image_url }}" class="w-full h-full object-contain mix-blend-multiply">
                                     @else
                                         <i class="fas fa-pills text-2xl text-slate-300"></i>
                                     @endif
