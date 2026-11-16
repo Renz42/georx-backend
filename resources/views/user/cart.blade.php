@@ -67,10 +67,15 @@
                             <div class="flex items-center gap-4">
                                 <div class="w-16 h-16 bg-slate-50 rounded-xl flex items-center justify-center shrink-0 border border-slate-100 p-2">
                                     @if($item->medicine?->image_url)
-                                        <img src="{{ $item->medicine->image_url }}" class="w-full h-full object-contain mix-blend-multiply">
-                                    @else
-                                        <i class="fas fa-pills text-2xl text-slate-300"></i>
+                                        <img src="{{ $item->medicine->image_url }}"
+                                             data-original-src="{{ $item->medicine->image_url }}"
+                                             @if($item->medicine->fallback_image_url) data-fallback-src="{{ $item->medicine->fallback_image_url }}" @endif
+                                             data-retry-step="0"
+                                             alt="{{ $item->medicine->generic_name ?? 'Medicine' }}"
+                                             class="w-full h-full object-contain mix-blend-multiply"
+                                             onerror="handleMedicineImageError(this)">
                                     @endif
+                                    <i data-image-placeholder class="{{ $item->medicine?->image_url ? 'hidden' : '' }} fas fa-pills text-2xl text-slate-300"></i>
                                 </div>
                                 <div>
                                     <h3 class="font-black text-slate-800">{{ $item->medicine->brand_name ?? $item->medicine->generic_name }}</h3>
@@ -115,5 +120,40 @@
         @endif
 
     </main>
+    <script>
+        function handleMedicineImageError(img) {
+            if (!img) return;
+            const step = parseInt(img.dataset.retryStep || '0', 10);
+            const originalSrc = img.dataset.originalSrc || '';
+            const fallbackSrc = img.dataset.fallbackSrc || '';
+
+            if (step === 0 && originalSrc) {
+                img.dataset.retryStep = '1';
+                let retrySrc;
+                try {
+                    const parsedUrl = new URL(originalSrc, window.location.origin);
+                    parsedUrl.searchParams.set('retry', '1');
+                    retrySrc = parsedUrl.toString();
+                } catch (e) {
+                    const hashIdx = originalSrc.indexOf('#');
+                    const base = hashIdx === -1 ? originalSrc : originalSrc.slice(0, hashIdx);
+                    const hash = hashIdx === -1 ? '' : originalSrc.slice(hashIdx);
+                    retrySrc = base + (base.indexOf('?') === -1 ? '?' : '&') + 'retry=1' + hash;
+                }
+                setTimeout(function () { img.src = retrySrc; }, 250);
+                return;
+            }
+            if (step <= 1 && fallbackSrc && img.getAttribute('src') !== fallbackSrc) {
+                img.dataset.retryStep = '2';
+                img.src = fallbackSrc;
+                return;
+            }
+            img.dataset.retryStep = '3';
+            img.onerror = null;
+            img.classList.add('hidden');
+            const placeholder = img.parentElement ? img.parentElement.querySelector('[data-image-placeholder]') : null;
+            if (placeholder) placeholder.classList.remove('hidden');
+        }
+    </script>
 </body>
 </html>

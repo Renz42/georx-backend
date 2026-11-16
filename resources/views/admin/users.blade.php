@@ -1,171 +1,328 @@
 @extends('admin.layouts.app')
+@section('title', 'User Management')
 
 @section('content')
-    @if(session('success'))
-        <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-xl mb-6 flex items-center shadow-sm">
-            <i class="fas fa-check-circle mr-3 text-emerald-500"></i>
-            <span class="font-medium">{{ session('success') }}</span>
+    <!-- Page Header -->
+    <div class="bg-white rounded-2xl p-6 sm:p-8 mb-6 shadow-xs border border-slate-200/80">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div>
+                <p class="text-[11px] font-extrabold text-[#2F7E6A] uppercase tracking-widest mb-1">Identity &amp; Access Governance</p>
+                <h2 class="text-2xl sm:text-3xl font-black text-[#0F172A] tracking-tight">Registered Users</h2>
+                <p class="text-[#64748B] text-sm mt-1 font-medium">Audit platform accounts, verify role classifications, and manage account access states safely.</p>
+            </div>
+            @if(($stats['legacy_drivers_excluded'] ?? 0) > 0)
+                <div class="bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-200/80 text-xs text-[#64748B] font-medium">
+                    <i class="fas fa-archive text-slate-400 mr-1.5"></i>
+                    <strong class="text-[#0F172A]">{{ $stats['legacy_drivers_excluded'] }}</strong> historical driver accounts archived (excluded from operational KPIs)
+                </div>
+            @endif
         </div>
-    @endif
-
-    <div class="mb-6">
-        <h2 class="text-3xl font-bold text-[#122056] tracking-tight">Registered Users</h2>
-        <p class="text-[#122056]/60 mt-1 font-medium">View detailed profiles and manage user access rights</p>
     </div>
 
-    <div class="bg-white rounded-2xl shadow-sm border border-[#EEEFFD] overflow-hidden">
+    <!-- User Summary Strip -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs">
+            <p class="text-[10px] font-black text-[#64748B] uppercase tracking-widest">Operational Users</p>
+            <p class="text-2xl font-black text-[#0F172A] mt-1">{{ $stats['users'] ?? 0 }}</p>
+            <p class="text-[11px] text-[#64748B] mt-0.5">Patients, Pharmacy Staff &amp; Admin</p>
+        </div>
+        <div class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs">
+            <p class="text-[10px] font-black text-[#64748B] uppercase tracking-widest">Verified &amp; Active</p>
+            <p class="text-2xl font-black text-[#2F7E6A] mt-1">{{ $stats['verified_users'] ?? 0 }}</p>
+            <p class="text-[11px] text-[#64748B] mt-0.5">Confirmed operational accounts</p>
+        </div>
+        <div class="bg-white rounded-2xl p-4 border border-amber-200/80 shadow-xs">
+            <p class="text-[10px] font-black text-amber-700 uppercase tracking-widest">Pending Verification</p>
+            <p class="text-2xl font-black text-amber-700 mt-1">{{ $stats['pending_verification_users'] ?? 0 }}</p>
+            <p class="text-[11px] text-[#64748B] mt-0.5">Awaiting email OTP verification</p>
+        </div>
+        <div class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs">
+            <p class="text-[10px] font-black text-[#64748B] uppercase tracking-widest">Suspended / Restricted</p>
+            <p class="text-2xl font-black text-rose-600 mt-1">{{ $stats['suspended_users'] ?? 0 }}</p>
+            <p class="text-[11px] text-[#64748B] mt-0.5">Access currently paused</p>
+        </div>
+    </div>
+
+    <!-- Search & Filter Controls -->
+    <div class="bg-white rounded-2xl shadow-xs border border-slate-200/80 p-5 mb-6">
+        <form method="GET" action="{{ route('admin.users') }}" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3.5 items-end">
+            <div class="lg:col-span-4">
+                <label class="block text-[10px] font-black text-[#64748B] uppercase tracking-wider mb-1.5">Search Users</label>
+                <div class="relative">
+                    <i class="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-[#64748B] text-xs"></i>
+                    <input type="text" name="search" value="{{ $search ?? request('search') }}"
+                           placeholder="Name, email address, phone, or user ID..."
+                           class="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-[#0F172A] focus:bg-white focus:outline-none focus:border-[#2F7E6A]">
+                </div>
+            </div>
+
+            <div class="lg:col-span-3">
+                <label class="block text-[10px] font-black text-[#64748B] uppercase tracking-wider mb-1.5">Role Classification</label>
+                <select name="role" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-[#0F172A] focus:bg-white focus:outline-none focus:border-[#2F7E6A]">
+                    <option value="all" {{ ($roleFilter ?? 'all') === 'all' ? 'selected' : '' }}>All Operational Roles ({{ $roleFilterCounts['all'] ?? 0 }})</option>
+                    <option value="patient" {{ ($roleFilter ?? '') === 'patient' ? 'selected' : '' }}>Patients / Customers ({{ $roleFilterCounts['patient'] ?? 0 }})</option>
+                    <option value="pharmacy_owner" {{ ($roleFilter ?? '') === 'pharmacy_owner' ? 'selected' : '' }}>Pharmacy Owners ({{ $roleFilterCounts['pharmacy_owner'] ?? 0 }})</option>
+                    <option value="pharmacist" {{ ($roleFilter ?? '') === 'pharmacist' ? 'selected' : '' }}>Pharmacists ({{ $roleFilterCounts['pharmacist'] ?? 0 }})</option>
+                    <option value="pharmacy_staff" {{ ($roleFilter ?? '') === 'pharmacy_staff' ? 'selected' : '' }}>Pharmacy Staff ({{ $roleFilterCounts['pharmacy_staff'] ?? 0 }})</option>
+                    <option value="administrator" {{ ($roleFilter ?? '') === 'administrator' ? 'selected' : '' }}>Super Administrators ({{ $roleFilterCounts['administrator'] ?? 0 }})</option>
+                    <option value="legacy_driver" {{ ($roleFilter ?? '') === 'legacy_driver' ? 'selected' : '' }}>Historical Drivers — Archived ({{ $roleFilterCounts['legacy_driver'] ?? 0 }})</option>
+                </select>
+            </div>
+
+            <div class="lg:col-span-3">
+                <label class="block text-[10px] font-black text-[#64748B] uppercase tracking-wider mb-1.5">Account Status</label>
+                <select name="status" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-[#0F172A] focus:bg-white focus:outline-none focus:border-[#2F7E6A]">
+                    <option value="all" {{ ($statusFilter ?? 'all') === 'all' ? 'selected' : '' }}>All Statuses</option>
+                    <option value="active" {{ ($statusFilter ?? '') === 'active' ? 'selected' : '' }}>Active / Approved</option>
+                    <option value="pending_verification" {{ ($statusFilter ?? '') === 'pending_verification' ? 'selected' : '' }}>Pending Verification</option>
+                    <option value="suspended" {{ ($statusFilter ?? '') === 'suspended' ? 'selected' : '' }}>Suspended</option>
+                    <option value="rejected" {{ ($statusFilter ?? '') === 'rejected' ? 'selected' : '' }}>Rejected</option>
+                </select>
+            </div>
+
+            <div class="lg:col-span-2 flex gap-2">
+                <button type="submit" class="flex-1 bg-[#2F7E6A] hover:bg-[#256655] text-white font-bold py-2.5 px-4 rounded-xl text-sm transition-colors">
+                    Apply
+                </button>
+                @if(!empty($search) || ($roleFilter ?? 'all') !== 'all' || ($statusFilter ?? 'all') !== 'all' || ($verificationFilter ?? 'all') !== 'all')
+                    <a href="{{ route('admin.users') }}" class="bg-slate-100 hover:bg-slate-200 text-[#64748B] font-bold py-2.5 px-3 rounded-xl text-sm transition-colors flex items-center justify-center" title="Reset Filters">
+                        <i class="fas fa-undo text-xs"></i>
+                    </a>
+                @endif
+            </div>
+        </form>
+    </div>
+
+    <!-- Users Directory Table -->
+    <div class="bg-white rounded-2xl shadow-xs border border-slate-200/80 overflow-hidden">
+        <div class="px-6 py-4 bg-slate-50/70 border-b border-slate-100 flex items-center justify-between">
+            <p class="text-xs font-bold text-[#64748B]">
+                @if(method_exists($usersList, 'firstItem'))
+                    Showing <span class="text-[#0F172A] font-black">{{ $usersList->firstItem() ?? 0 }}–{{ $usersList->lastItem() ?? 0 }}</span> of <span class="text-[#0F172A] font-black">{{ $usersList->total() }}</span> accounts
+                @else
+                    Showing <span class="text-[#0F172A] font-black">{{ $usersList->count() }}</span> accounts
+                @endif
+            </p>
+        </div>
+
         <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse whitespace-nowrap">
-                <thead class="bg-geo-50 border-b border-[#EEEFFD]">
-                    <tr>
-                        <th class="px-6 py-4 text-[10px] font-black text-[#122056]/50 uppercase tracking-widest">User Name</th>
-                        <th class="px-6 py-4 text-[10px] font-black text-[#122056]/50 uppercase tracking-widest">Contact Info</th>
-                        
-                        <th class="px-6 py-4 text-[10px] font-black text-[#122056]/50 uppercase tracking-widest">Account Type</th>
-                        
-                        <th class="px-6 py-4 text-[10px] font-black text-[#122056]/50 uppercase tracking-widest">Joined Date</th>
-                        <th class="px-6 py-4 text-[10px] font-black text-[#122056]/50 uppercase tracking-widest text-center">Actions</th>
+                <thead>
+                    <tr class="bg-slate-50 border-b border-slate-200/80 text-[10px] font-black text-[#64748B] uppercase tracking-widest">
+                        <th class="px-6 py-3.5">User</th>
+                        <th class="px-6 py-3.5">Contact</th>
+                        <th class="px-6 py-3.5">Role Classification</th>
+                        <th class="px-6 py-3.5">Account Status</th>
+                        <th class="px-6 py-3.5">Joined Date</th>
+                        <th class="px-6 py-3.5 text-right">Governance Actions</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-[#EEEFFD]">
-                    @if(isset($usersList) && $usersList->count() > 0)
-                        @foreach($usersList as $sysUser)
-                            <tr class="hover:bg-geo-50 transition-colors">
-                                <td class="px-6 py-4">
-                                    <div class="flex items-center gap-3">
-                                        <div class="w-9 h-9 rounded-full bg-[#5B65DC]/10 flex items-center justify-center text-[#5B65DC] font-black text-sm">
-                                            {{ strtoupper(substr($sysUser->name, 0, 1)) }}
-                                        </div>
-                                        <span class="font-bold text-[#122056]">{{ $sysUser->name }}</span>
-                                    </div>
-                                </td>
-                                <td class="px-6 py-4">
-                                    <p class="text-sm font-semibold text-[#122056]">{{ $sysUser->email }}</p>
-                                </td>
-                                
-                                <td class="px-6 py-4">
-                                    @if($sysUser->role === 'pharmacy_admin' || $sysUser->role === 'pharmacy_owner')
-                                        <span class="bg-blue-50 text-blue-600 border border-blue-200 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest flex items-center gap-1 w-max">
-                                            <i class="fas fa-store"></i> Pharmacy Admin
-                                        </span>
-                                    @elseif($sysUser->role === 'super_admin' || $sysUser->role === 'administrator')
-                                        <span class="bg-purple-50 text-purple-600 border border-purple-200 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest flex items-center gap-1 w-max">
-                                            <i class="fas fa-shield-alt"></i> Super Admin
-                                        </span>
-                                    @elseif($sysUser->role === 'driver' || $sysUser->role === 'delivery_partner')
-                                        <span class="bg-indigo-50 text-indigo-600 border border-indigo-200 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest flex items-center gap-1 w-max">
-                                            <i class="fas fa-motorcycle"></i> Driver
-                                        </span>
-                                    @else
-                                        <span class="bg-emerald-50 text-emerald-600 border border-emerald-200 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest flex items-center gap-1 w-max">
-                                            <i class="fas fa-user"></i> Patient
-                                        </span>
-                                    @endif
-                                </td>
+                <tbody class="divide-y divide-slate-100 text-sm">
+                    @php
+                        $currentAdminId = (int) (auth('admin')->id() ?? auth()->id());
+                    @endphp
+                    @forelse($usersList as $sysUser)
+                        @php
+                            $roleMeta = \App\Http\Controllers\AdminController::classifyUserRole($sysUser->role);
+                            $isSelf = (int) $sysUser->id === $currentAdminId;
+                            $acctStatus = strtolower((string) ($sysUser->account_status ?? 'active'));
 
-                                <td class="px-6 py-4 text-sm font-medium text-[#122056]/70">
-                                    {{ $sysUser->created_at->format('M d, Y') }}
-                                </td>
-                                <td class="px-6 py-4 text-center">
-                                    <div class="flex justify-center gap-2">
-                                        <button onclick="viewUserModal({{ json_encode($sysUser) }})" 
-                                                class="p-2 text-[#5B65DC] hover:bg-[#5B65DC]/10 rounded-lg transition-colors" title="View Profile">
-                                            <i class="fas fa-eye"></i>
-                                        </button>
-                                        
-                                        <form action="{{ route('admin.users.destroy', $sysUser->id) }}" method="POST" onsubmit="return confirm('Are you sure you want to delete this user profile?');" class="inline">
+                            $userModalPayload = [
+                                'id' => $sysUser->id,
+                                'name' => $sysUser->name,
+                                'email' => $sysUser->email,
+                                'phone' => $sysUser->phone ?: 'Not Provided',
+                                'role_label' => $roleMeta['label'],
+                                'raw_role' => $sysUser->role,
+                                'account_status' => ucfirst(str_replace('_', ' ', $acctStatus)),
+                                'pharmacy_name' => $sysUser->pharmacy->name ?? null,
+                                'created_at' => $sysUser->created_at ? $sysUser->created_at->format('M d, Y h:i A') : 'N/A',
+                            ];
+                        @endphp
+                        <tr class="hover:bg-slate-50/70 transition-colors">
+                            <td class="px-6 py-4">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-9 h-9 rounded-xl bg-[#E9F7F2] text-[#2F7E6A] flex items-center justify-center font-black text-xs shrink-0">
+                                        {{ strtoupper(substr($sysUser->name ?: 'U', 0, 1)) }}
+                                    </div>
+                                    <div>
+                                        <p class="font-bold text-[#0F172A] flex items-center gap-1.5">
+                                            <span>{{ $sysUser->name }}</span>
+                                            @if($isSelf)
+                                                <span class="bg-[#0F172A] text-white text-[9px] font-black px-2 py-0.5 rounded-md uppercase">You</span>
+                                            @endif
+                                        </p>
+                                        <p class="text-[11px] text-[#64748B]">ID #{{ $sysUser->id }} @if($sysUser->pharmacy) &bull; {{ $sysUser->pharmacy->name }} @endif</p>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-6 py-4">
+                                <p class="text-xs font-bold text-[#0F172A]">{{ $sysUser->email }}</p>
+                                <p class="text-[11px] text-[#64748B]">{{ $sysUser->phone ?: 'No phone listed' }}</p>
+                            </td>
+                            <td class="px-6 py-4">
+                                <span class="border {{ $roleMeta['badge_class'] }} text-[10px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider inline-flex items-center gap-1.5">
+                                    <i class="{{ $roleMeta['icon'] }}"></i> {{ $roleMeta['label'] }}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4">
+                                @if(in_array($acctStatus, ['active', 'approved']))
+                                    <span class="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg bg-[#E9F7F2] text-[#2F7E6A] border border-[#63C6A7]/40">
+                                        <i class="fas fa-check-circle"></i> {{ ucfirst($acctStatus) }}
+                                    </span>
+                                @elseif($acctStatus === 'pending_verification')
+                                    <span class="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200">
+                                        <i class="fas fa-clock"></i> Pending OTP
+                                    </span>
+                                @elseif($acctStatus === 'suspended')
+                                    <span class="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 border border-rose-200">
+                                        <i class="fas fa-pause-circle"></i> Suspended
+                                    </span>
+                                @else
+                                    <span class="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 border border-slate-300">
+                                        {{ ucfirst(str_replace('_', ' ', $acctStatus)) }}
+                                    </span>
+                                @endif
+                            </td>
+                            <td class="px-6 py-4 text-xs font-medium text-[#64748B]">
+                                {{ $sysUser->created_at ? $sysUser->created_at->format('M d, Y') : 'N/A' }}
+                            </td>
+                            <td class="px-6 py-4 text-right">
+                                <div class="flex items-center justify-end gap-1.5">
+                                    <button type="button"
+                                            onclick='viewUserModal(@json($userModalPayload))'
+                                            class="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-[#E9F7F2] text-[#0F172A] hover:text-[#2F7E6A] text-xs font-bold transition-colors"
+                                            title="Inspect Profile">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+
+                                    @if(!$isSelf)
+                                        <form action="{{ route('admin.users.status', $sysUser->id) }}" method="POST" class="inline">
+                                            @csrf
+                                            @method('PATCH')
+                                            @if($acctStatus === 'suspended')
+                                                <input type="hidden" name="action" value="activate">
+                                                <button type="submit"
+                                                        onclick="return confirm('Reactivate account access for {{ addslashes($sysUser->name) }}?');"
+                                                        class="px-2.5 py-1.5 rounded-lg bg-[#E9F7F2] hover:bg-[#2F7E6A] text-[#2F7E6A] hover:text-white text-xs font-bold transition-colors"
+                                                        title="Reactivate User">
+                                                    <i class="fas fa-undo"></i>
+                                                </button>
+                                            @else
+                                                <input type="hidden" name="action" value="suspend">
+                                                <button type="submit"
+                                                        onclick="return confirm('Suspend account access for {{ addslashes($sysUser->name) }}? Historical records will be preserved.');"
+                                                        class="px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-bold transition-colors"
+                                                        title="Suspend User">
+                                                    <i class="fas fa-pause"></i>
+                                                </button>
+                                            @endif
+                                        </form>
+
+                                        <form action="{{ route('admin.users.destroy', $sysUser->id) }}" method="POST"
+                                              onsubmit="return confirm('Delete this user profile? Note: Users with historical orders or pharmacy records are protected from deletion.');"
+                                              class="inline">
                                             @csrf
                                             @method('DELETE')
-                                            <button type="submit" class="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Delete User">
+                                            <button type="submit" class="px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold transition-colors" title="Delete Unlinked User">
                                                 <i class="fas fa-trash-alt"></i>
                                             </button>
                                         </form>
-                                    </div>
-                                </td>
-                            </tr>
-                        @endforeach
-                    @else
-                        <tr>
-                            <td colspan="5" class="px-6 py-12 text-center text-slate-400 font-medium">
-                                No patients registered on the locator network yet.
+                                    @else
+                                        <span class="text-[11px] font-semibold text-[#64748B] px-2 py-1 bg-slate-50 rounded-lg border border-slate-200" title="Active Super Admin session cannot be self-deleted or self-suspended">
+                                            Protected
+                                        </span>
+                                    @endif
+                                </div>
                             </td>
                         </tr>
-                    @endif
+                    @empty
+                        <tr>
+                            <td colspan="6" class="px-6 py-14 text-center text-[#64748B] font-medium">
+                                <i class="fas fa-users-slash text-3xl text-slate-300 mb-2 block"></i>
+                                No user accounts matched your filter criteria.
+                            </td>
+                        </tr>
+                    @endforelse
                 </tbody>
             </table>
         </div>
+
+        @if(method_exists($usersList, 'hasPages') && $usersList->hasPages())
+            <div class="px-6 py-4 border-t border-slate-100 bg-slate-50/50">
+                {{ $usersList->links() }}
+            </div>
+        @endif
     </div>
 
-    <div id="viewUserModal" class="hidden fixed inset-0 bg-[#122056]/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden">
-            <div class="px-6 py-5 border-b border-[#EEEFFD] flex justify-between items-center bg-geo-50">
-                <h3 class="text-lg font-black text-[#122056] flex items-center gap-2">
-                    <i class="fas fa-id-card text-[#5B65DC]"></i> User Profile
+    <!-- User Profile Modal -->
+    <div id="viewUserModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+        <div class="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden">
+            <div class="px-6 py-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+                <h3 class="text-base font-black text-[#0F172A] flex items-center gap-2">
+                    <i class="fas fa-id-card text-[#2F7E6A]"></i> Account Profile Inspection
                 </h3>
-                <button onclick="closeUserModal()" class="w-8 h-8 rounded-full bg-white border border-[#EEEFFD] text-[#122056]/40 hover:text-red-500 hover:bg-red-50 transition-colors flex items-center justify-center">
+                <button type="button" onclick="closeUserModal()" class="w-8 h-8 rounded-lg bg-white border border-slate-200 text-[#64748B] hover:text-[#0F172A] flex items-center justify-center">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
-            <div class="p-8 flex flex-col items-center text-center">
-                <div id="modal-avatar" class="w-24 h-24 rounded-full bg-[#5B65DC]/10 flex items-center justify-center text-[#5B65DC] font-black text-4xl mb-4 border-4 border-white shadow-md">
-                    U
-                </div>
-                <h4 id="modal-name" class="text-2xl font-black text-[#122056] mb-1">User Name</h4>
-                
-                <p id="modal-role" class="text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest mb-6 border">Role</p>
-
-                <div class="w-full bg-geo-50 border border-[#EEEFFD] rounded-2xl p-4 text-left space-y-4">
-                    <div>
-                        <p class="text-[10px] font-black text-[#122056]/40 uppercase tracking-widest mb-1">Email Address</p>
-                        <p id="modal-email" class="text-sm font-bold text-[#122056] flex items-center gap-2">
-                            <i class="fas fa-envelope text-[#5B65DC]/50"></i> email@example.com
-                        </p>
+            <div class="p-6 space-y-4">
+                <div class="flex items-center gap-4">
+                    <div id="modal-avatar" class="w-14 h-14 rounded-2xl bg-[#E9F7F2] text-[#2F7E6A] flex items-center justify-center font-black text-xl shrink-0">
+                        U
                     </div>
-                    <div>
-                        <p class="text-[10px] font-black text-[#122056]/40 uppercase tracking-widest mb-1">Account Created On</p>
-                        <p id="modal-date" class="text-sm font-bold text-[#122056] flex items-center gap-2">
-                            <i class="fas fa-calendar-alt text-[#5B65DC]/50"></i> Jan 01, 2026
-                        </p>
+                    <div class="min-w-0">
+                        <h4 id="modal-name" class="text-lg font-black text-[#0F172A] truncate">User Name</h4>
+                        <p id="modal-role" class="text-xs font-bold text-[#2F7E6A]">Role</p>
+                    </div>
+                </div>
+
+                <div class="bg-slate-50 border border-slate-200/70 rounded-xl p-4 space-y-3 text-xs">
+                    <div class="flex justify-between">
+                        <span class="text-[#64748B] font-bold uppercase">User ID</span>
+                        <span id="modal-id" class="font-mono font-bold text-[#0F172A]">—</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-[#64748B] font-bold uppercase">Email</span>
+                        <span id="modal-email" class="font-bold text-[#0F172A]">—</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-[#64748B] font-bold uppercase">Phone</span>
+                        <span id="modal-phone" class="font-bold text-[#0F172A]">—</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-[#64748B] font-bold uppercase">Status</span>
+                        <span id="modal-status" class="font-bold text-[#0F172A]">—</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-[#64748B] font-bold uppercase">Associated Pharmacy</span>
+                        <span id="modal-pharmacy" class="font-bold text-[#0F172A]">—</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-[#64748B] font-bold uppercase">Registered On</span>
+                        <span id="modal-date" class="font-bold text-[#0F172A]">—</span>
                     </div>
                 </div>
             </div>
-            <div class="p-6 border-t border-[#EEEFFD] bg-geo-50 flex justify-end">
-                <button onclick="closeUserModal()" class="px-6 py-2.5 bg-[#5B65DC] hover:bg-[#4a54c4] text-white font-bold rounded-xl transition-colors shadow-md">
-                    Done
+            <div class="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-end">
+                <button type="button" onclick="closeUserModal()" class="px-5 py-2 bg-[#0F172A] text-white text-xs font-bold rounded-xl">
+                    Close
                 </button>
             </div>
         </div>
     </div>
-@endsection
 
-@push('scripts')
     <script>
         function viewUserModal(user) {
-            document.getElementById('modal-name').innerText = user.name;
-            document.getElementById('modal-avatar').innerText = user.name.charAt(0).toUpperCase();
-            document.getElementById('modal-email').innerHTML = `<i class="fas fa-envelope text-[#5B65DC]/50 mr-2"></i> ${user.email}`;
-            
-            // Format the Date
-            let joinDate = new Date(user.created_at);
-            let formattedDate = joinDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-            document.getElementById('modal-date').innerHTML = `<i class="fas fa-calendar-alt text-[#5B65DC]/50 mr-2"></i> ${formattedDate}`;
-            
-            // ✨ NEW: Dynamic Role Logic for Modal ✨
-            let roleBadge = document.getElementById('modal-role');
-            if (user.role === 'pharmacy_admin' || user.role === 'pharmacy_owner') {
-                roleBadge.innerText = 'Pharmacy Admin';
-                roleBadge.className = 'text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest mb-6 border bg-blue-50 text-blue-600 border-blue-200';
-            } else if (user.role === 'super_admin' || user.role === 'administrator') {
-                roleBadge.innerText = 'Super Admin';
-                roleBadge.className = 'text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest mb-6 border bg-purple-50 text-purple-600 border-purple-200';
-            } else if (user.role === 'driver' || user.role === 'delivery_partner') {
-                roleBadge.innerText = 'Driver';
-                roleBadge.className = 'text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest mb-6 border bg-indigo-50 text-indigo-600 border-indigo-200';
-            } else {
-                roleBadge.innerText = 'Patient User';
-                roleBadge.className = 'text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest mb-6 border bg-emerald-50 text-emerald-600 border-emerald-200';
-            }
-
+            document.getElementById('modal-id').textContent = '#' + user.id;
+            document.getElementById('modal-name').textContent = user.name || 'N/A';
+            document.getElementById('modal-avatar').textContent = (user.name || 'U').charAt(0).toUpperCase();
+            document.getElementById('modal-email').textContent = user.email || 'N/A';
+            document.getElementById('modal-phone').textContent = user.phone || 'Not Provided';
+            document.getElementById('modal-role').textContent = user.role_label || user.raw_role;
+            document.getElementById('modal-status').textContent = user.account_status || 'Active';
+            document.getElementById('modal-pharmacy').textContent = user.pharmacy_name || 'None';
+            document.getElementById('modal-date').textContent = user.created_at || 'N/A';
             document.getElementById('viewUserModal').classList.remove('hidden');
         }
 
@@ -173,4 +330,4 @@
             document.getElementById('viewUserModal').classList.add('hidden');
         }
     </script>
-@endpush
+@endsection

@@ -149,10 +149,15 @@
                     
                     <div class="h-48 sm:h-56 bg-slate-50 relative flex items-center justify-center p-6 border-b border-slate-100 overflow-hidden">
                         @if($medicine->image_url)
-                            <img src="{{ $medicine->image_url }}" alt="Medicine" class="w-full h-full object-contain mix-blend-multiply group-hover:scale-110 transition-transform duration-500">
-                        @else
-                            <i class="fas fa-pills text-7xl text-slate-200 group-hover:text-blue-200 transition-colors duration-300"></i>
+                            <img src="{{ $medicine->image_url }}"
+                                 data-original-src="{{ $medicine->image_url }}"
+                                 @if($medicine->fallback_image_url) data-fallback-src="{{ $medicine->fallback_image_url }}" @endif
+                                 data-retry-step="0"
+                                 alt="Medicine"
+                                 class="w-full h-full object-contain mix-blend-multiply group-hover:scale-110 transition-transform duration-500"
+                                 onerror="handleMedicineImageError(this)">
                         @endif
+                        <i data-image-placeholder class="{{ $medicine->image_url ? 'hidden' : '' }} fas fa-pills text-7xl text-slate-200 group-hover:text-blue-200 transition-colors duration-300"></i>
                         
                         @if($medicine->prescription_required)
                             <div class="absolute top-4 left-4 bg-rose-100 text-rose-700 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 shadow-sm">
@@ -433,6 +438,40 @@
                 }, { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 });
             }
         });
+
+        function handleMedicineImageError(img) {
+            if (!img) return;
+            const step = parseInt(img.dataset.retryStep || '0', 10);
+            const originalSrc = img.dataset.originalSrc || '';
+            const fallbackSrc = img.dataset.fallbackSrc || '';
+
+            if (step === 0 && originalSrc) {
+                img.dataset.retryStep = '1';
+                let retrySrc;
+                try {
+                    const parsedUrl = new URL(originalSrc, window.location.origin);
+                    parsedUrl.searchParams.set('retry', '1');
+                    retrySrc = parsedUrl.toString();
+                } catch (e) {
+                    const hashIdx = originalSrc.indexOf('#');
+                    const base = hashIdx === -1 ? originalSrc : originalSrc.slice(0, hashIdx);
+                    const hash = hashIdx === -1 ? '' : originalSrc.slice(hashIdx);
+                    retrySrc = base + (base.indexOf('?') === -1 ? '?' : '&') + 'retry=1' + hash;
+                }
+                setTimeout(function () { img.src = retrySrc; }, 250);
+                return;
+            }
+            if (step <= 1 && fallbackSrc && img.getAttribute('src') !== fallbackSrc) {
+                img.dataset.retryStep = '2';
+                img.src = fallbackSrc;
+                return;
+            }
+            img.dataset.retryStep = '3';
+            img.onerror = null;
+            img.classList.add('hidden');
+            const placeholder = img.parentElement ? img.parentElement.querySelector('[data-image-placeholder]') : null;
+            if (placeholder) placeholder.classList.remove('hidden');
+        }
     </script>
 </body>
 </html>

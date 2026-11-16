@@ -1,161 +1,209 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Review Application - Super Admin</title>
-    
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-    <style>
-        body { font-family: 'Outfit', sans-serif; }
-    </style>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: { sans: ['Outfit', 'sans-serif'] },
-                    colors: {
-                        geo: { 900: '#0F172A', 800: '#1E293B', 700: '#1F2E2C', 600: '#2F7E6A', 500: '#63C6A7', 400: '#BFE8D6', 300: '#A0D8C4', 100: '#E9F7F2', 50: '#F8FAFC' }
-                    }
-                }
-            }
-        }
-    </script></head>
-<body class="bg-slate-50 min-h-screen">
-    <!-- Navigation -->
-    <nav class="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-4 shadow-lg">
-        <div class="max-w-7xl mx-auto flex justify-between items-center">
-            <div class="flex items-center gap-3">
-                <div class="bg-white/20 p-2 rounded-lg">
-                    <i class="fas fa-shield-alt text-lg"></i>
-                </div>
-                <div>
-                    <h1 class="text-xl font-bold tracking-tight">Super Admin</h1>
-                    <p class="text-blue-200 text-xs font-medium">GEORX: A Medicine Hub Portal</p>
-                </div>
+@extends('admin.layouts.app')
+@section('title', 'Review Pharmacy — ' . $pharmacy->name)
+
+@section('content')
+    <div class="mb-4 flex items-center justify-between">
+        <a href="{{ route('admin.pharmacies') }}" class="inline-flex items-center gap-2 text-xs font-bold text-[#2F7E6A] hover:underline">
+            <i class="fas fa-arrow-left"></i> Back to Partner Pharmacies
+        </a>
+        <a href="{{ route('admin.pharmacies.inventory', $pharmacy) }}" class="inline-flex items-center gap-1.5 text-xs font-bold text-[#0F172A] bg-white px-3.5 py-2 rounded-xl border border-slate-200 shadow-2xs hover:border-[#2F7E6A]">
+            <i class="fas fa-boxes-stacked text-[#2F7E6A]"></i> Audit Branch Inventory
+        </a>
+    </div>
+
+    @php
+        $inAlijis = $isInsideAlijis ?? \App\Services\GeofenceService::isInsideAlijis((float) $pharmacy->latitude, (float) $pharmacy->longitude);
+    @endphp
+
+    <div class="bg-white rounded-2xl shadow-xs border border-slate-200/80 overflow-hidden mb-6">
+        <!-- Status Banner -->
+        <div class="px-6 py-5 border-b border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4 {{ $pharmacy->status === 'approved' ? 'bg-[#E9F7F2]/60' : ($pharmacy->status === 'suspended' ? 'bg-rose-50/70' : 'bg-amber-50/70') }}">
+            <div>
+                <p class="text-[10px] font-black uppercase tracking-widest {{ $pharmacy->status === 'approved' ? 'text-[#2F7E6A]' : ($pharmacy->status === 'suspended' ? 'text-rose-700' : 'text-amber-800') }}">
+                    Partner Governance Record #{{ $pharmacy->id }}
+                </p>
+                <h2 class="text-2xl font-black text-[#0F172A] mt-0.5">{{ $pharmacy->name }}</h2>
             </div>
-            <div class="flex items-center gap-4">
-                <div class="flex items-center gap-2 bg-white/10 px-3 py-2 rounded-lg">
-                    <i class="fas fa-user-shield text-blue-200"></i>
-                    <span class="text-sm font-medium">{{ Auth::user()->name }}</span>
-                </div>
-                <form action="{{ route('logout') }}" method="POST" class="inline">
-                    @csrf
-                    <button type="submit" class="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2">
-                        <i class="fas fa-sign-out-alt"></i>Logout
-                    </button>
-                </form>
+
+            <div class="flex items-center gap-2">
+                @if($pharmacy->status === 'approved' && $pharmacy->is_active)
+                    <span class="bg-[#2F7E6A] text-white text-xs font-black uppercase tracking-wider px-3.5 py-1.5 rounded-xl">
+                        <i class="fas fa-check-circle mr-1"></i> Approved &amp; Live
+                    </span>
+                @elseif($pharmacy->status === 'approved' && !$pharmacy->is_active)
+                    <span class="bg-amber-600 text-white text-xs font-black uppercase tracking-wider px-3.5 py-1.5 rounded-xl">
+                        <i class="fas fa-moon mr-1"></i> Approved (Offline)
+                    </span>
+                @elseif($pharmacy->status === 'suspended')
+                    <span class="bg-rose-600 text-white text-xs font-black uppercase tracking-wider px-3.5 py-1.5 rounded-xl">
+                        <i class="fas fa-pause-circle mr-1"></i> Suspended
+                    </span>
+                @elseif($pharmacy->status === 'pending')
+                    <span class="bg-amber-500 text-white text-xs font-black uppercase tracking-wider px-3.5 py-1.5 rounded-xl">
+                        <i class="fas fa-hourglass-half mr-1"></i> Pending Approval
+                    </span>
+                @else
+                    <span class="bg-slate-700 text-white text-xs font-black uppercase tracking-wider px-3.5 py-1.5 rounded-xl">
+                        <i class="fas fa-ban mr-1"></i> Rejected
+                    </span>
+                @endif
             </div>
         </div>
-    </nav>
 
-    <!-- Sidebar + Content -->
-    <div class="flex">
-        <!-- Sidebar -->
-        <aside class="w-64 bg-white shadow-sm border-r border-slate-200 min-h-screen">
-            <nav class="p-4">
-                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 px-4">Main Menu</p>
-                <a href="{{ route('admin.dashboard') }}" 
-                   class="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 text-slate-600 hover:text-slate-800 mb-2 transition-all">
-                    <i class="fas fa-tachometer-alt"></i>Dashboard
-                </a>
-                <a href="{{ route('admin.pharmacies') }}" 
-                   class="flex items-center gap-3 px-4 py-3 rounded-xl bg-blue-50 text-blue-700 font-semibold mb-2 border border-blue-100">
-                    <i class="fas fa-store"></i>Pharmacies
-                </a>
+        <!-- Details Grid -->
+        <div class="p-6 sm:p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div class="space-y-4">
+                <h3 class="text-xs font-black text-[#0F172A] uppercase tracking-widest border-b border-slate-100 pb-2">
+                    <i class="fas fa-store text-[#2F7E6A] mr-1.5"></i> Storefront &amp; Location Details
+                </h3>
 
-            
-                <div class="border-t border-slate-200 my-4"></div>
-                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 px-4">Quick Links</p>
-                <a href="{{ url('/') }}" 
-                   class="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 text-slate-500 hover:text-slate-700 transition-all">
-                    <i class="fas fa-map"></i>View Public Map
-                </a>
-            </nav>
-        </aside>
+                <div>
+                    <p class="text-[10px] font-black text-[#64748B] uppercase">Pharmacy Name</p>
+                    <p class="text-sm font-bold text-[#0F172A] mt-0.5">{{ $pharmacy->name }}</p>
+                </div>
 
-        <!-- Main Content -->
-        <main class="flex-1 p-8">
-            <div class="max-w-4xl mx-auto">
-                
-                <a href="{{ route('admin.pharmacies') }}" class="text-blue-600 hover:underline mb-6 inline-block"><i class="fas fa-arrow-left mr-2"></i> Back to Pharmacies</a>
+                <div>
+                    <p class="text-[10px] font-black text-[#64748B] uppercase">Physical Address</p>
+                    <p class="text-sm font-medium text-[#0F172A] mt-0.5">{{ $pharmacy->address }}</p>
+                </div>
 
-                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                    <div class="bg-amber-50 border-b border-amber-100 p-6 flex justify-between items-center">
-                        <div>
-                            <h2 class="text-2xl font-bold text-amber-800">Pending Application Review</h2>
-                            <p class="text-amber-600 text-sm mt-1">Please verify the credentials below before approving.</p>
-                        </div>
-                        <span class="bg-amber-200 text-amber-800 font-black uppercase tracking-widest text-xs px-3 py-1 rounded-full">Action Required</span>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <p class="text-[10px] font-black text-[#64748B] uppercase">Coordinates</p>
+                        <p class="text-xs font-mono font-bold text-[#0F172A] mt-0.5">{{ $pharmacy->latitude }}, {{ $pharmacy->longitude }}</p>
                     </div>
-
-                    <div class="p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <!-- Pharmacy Details -->
-                        <div>
-                            <h3 class="font-bold text-slate-800 border-b pb-2 mb-4">Pharmacy Information</h3>
-                            <p class="text-xs text-slate-400 font-bold uppercase mb-1">Pharmacy Name</p>
-                            <p class="font-bold text-lg mb-4">{{ $pharmacy->name }}</p>
-
-                            <p class="text-xs text-slate-400 font-bold uppercase mb-1">Address</p>
-                            <p class="mb-4">{{ $pharmacy->address }}</p>
-
-                            <p class="text-xs text-slate-400 font-bold uppercase mb-1">Contact Phone</p>
-                            <p class="mb-4">{{ $pharmacy->phone }}</p>
-
-                            <!-- ✨ NEW OPERATING HOURS DISPLAY ✨ -->
-                            <p class="text-xs text-slate-400 font-bold uppercase mb-1">Operating Hours</p>
-                            <p class="mb-4">
-                                @if(is_array($pharmacy->operating_hours) && isset($pharmacy->operating_hours['open']) && isset($pharmacy->operating_hours['close']))
-                                    <span class="font-bold text-slate-700 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
-                                        {{ \Carbon\Carbon::parse($pharmacy->operating_hours['open'])->format('h:i A') }} 
-                                        <span class="text-slate-400 mx-1">—</span> 
-                                        {{ \Carbon\Carbon::parse($pharmacy->operating_hours['close'])->format('h:i A') }}
-                                    </span>
-                                @else
-                                    <span class="text-rose-500 italic font-medium bg-rose-50 px-3 py-1.5 rounded-lg border border-rose-100">
-                                        <i class="fas fa-exclamation-triangle mr-1"></i> Not configured properly
-                                    </span>
-                                @endif
-                            </p>
-                        </div>
-
-                        <!-- Legal/Owner Details -->
-                        <div>
-                            <h3 class="font-bold text-slate-800 border-b pb-2 mb-4">Legal & Ownership</h3>
-                            <p class="text-xs text-slate-400 font-bold uppercase mb-1">Owner Name</p>
-                            <p class="font-bold mb-4">{{ $pharmacy->owner_name }}</p>
-
-                            <p class="text-xs text-slate-400 font-bold uppercase mb-1">LTO / License Number</p>
-                            <p class="font-mono bg-slate-100 p-2 rounded border font-bold text-blue-600 mb-4">{{ $pharmacy->license_number ?? $pharmacy->lto_number ?? 'Not Provided' }}</p>
-                            
-                            <p class="text-xs text-slate-400 font-bold uppercase mb-1">Registered Email</p>
-                            <p class="mb-4">{{ $pharmacy->email }}</p>
-                        </div>
-                    </div>
-
-                    <!-- Action Buttons -->
-                    <div class="bg-slate-50 p-6 border-t border-slate-100 flex gap-4 justify-end">
-                        <form action="{{ route('admin.pharmacies.reject', $pharmacy->id) }}" method="POST" onsubmit="return confirm('Are you sure you want to REJECT this application?');">
-                            @csrf
-                            @method('DELETE')
-                            <button type="submit" class="bg-white border-2 border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 font-bold py-3 px-6 rounded-xl transition">
-                                <i class="fas fa-times mr-2"></i> Reject Application
-                            </button>
-                        </form>
-
-                        <form action="{{ route('admin.pharmacies.approve', $pharmacy->id) }}" method="POST">
-                            @csrf
-                            @method('PATCH')
-                            <button type="submit" class="bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-200 font-bold py-3 px-8 rounded-xl transition">
-                                <i class="fas fa-check mr-2"></i> Approve Pharmacy
-                            </button>
-                        </form>
+                    <div>
+                        <p class="text-[10px] font-black text-[#64748B] uppercase">Barangay Alijis Geofence</p>
+                        @if($inAlijis)
+                            <span class="inline-flex items-center gap-1 text-xs font-bold text-[#2F7E6A] mt-0.5">
+                                <i class="fas fa-check-circle"></i> Inside Boundary
+                            </span>
+                        @else
+                            <span class="inline-flex items-center gap-1 text-xs font-bold text-rose-600 mt-0.5">
+                                <i class="fas fa-times-circle"></i> Outside Boundary (Ineligible)
+                            </span>
+                        @endif
                     </div>
                 </div>
+
+                <div>
+                    <p class="text-[10px] font-black text-[#64748B] uppercase">Operating Hours</p>
+                    <p class="text-xs font-bold text-[#0F172A] mt-1">
+                        @if(is_array($pharmacy->operating_hours) && isset($pharmacy->operating_hours['open'], $pharmacy->operating_hours['close']))
+                            <span class="bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 inline-block">
+                                {{ $pharmacy->operating_hours['open'] }} — {{ $pharmacy->operating_hours['close'] }}
+                            </span>
+                        @else
+                            <span class="text-[#64748B]">Default schedule / Not specified</span>
+                        @endif
+                    </p>
+                </div>
             </div>
-        </main>
+
+            <div class="space-y-4">
+                <h3 class="text-xs font-black text-[#0F172A] uppercase tracking-widest border-b border-slate-100 pb-2">
+                    <i class="fas fa-id-card text-[#2F7E6A] mr-1.5"></i> Legal, Licensing &amp; Ownership
+                </h3>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <p class="text-[10px] font-black text-[#64748B] uppercase">Registered Owner</p>
+                        <p class="text-sm font-bold text-[#0F172A] mt-0.5">{{ $pharmacy->owner_name ?: ($ownerAccount->name ?? 'Not Provided') }}</p>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-black text-[#64748B] uppercase">Contact Phone</p>
+                        <p class="text-sm font-bold text-[#0F172A] mt-0.5">{{ $pharmacy->phone ?: 'Not Provided' }}</p>
+                    </div>
+                </div>
+
+                <div>
+                    <p class="text-[10px] font-black text-[#64748B] uppercase">Registered Email</p>
+                    <p class="text-sm font-bold text-[#0F172A] mt-0.5">{{ $pharmacy->email ?: ($ownerAccount->email ?? 'Not Provided') }}</p>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <p class="text-[10px] font-black text-[#64748B] uppercase">FDA LTO / License Number</p>
+                        <p class="font-mono text-xs font-bold bg-slate-50 px-3 py-2 rounded-lg border border-slate-200 text-[#0F172A] mt-1">
+                            {{ $pharmacy->license_number ?? $pharmacy->lto_number ?? 'Not Provided' }}
+                        </p>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-black text-[#64748B] uppercase">Business Permit</p>
+                        <p class="font-mono text-xs font-bold bg-slate-50 px-3 py-2 rounded-lg border border-slate-200 text-[#0F172A] mt-1">
+                            {{ $pharmacy->business_permit ?: 'Verified on File' }}
+                        </p>
+                    </div>
+                </div>
+
+                <div>
+                    <p class="text-[10px] font-black text-[#64748B] uppercase">Application / Registration Date</p>
+                    <p class="text-xs font-bold text-[#0F172A] mt-0.5">{{ $pharmacy->created_at ? $pharmacy->created_at->format('F d, Y h:i A') : 'N/A' }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Governance Action Bar -->
+        <div class="px-6 py-4 bg-slate-50 border-t border-slate-200/80 flex flex-wrap items-center justify-between gap-4">
+            <a href="{{ route('admin.pharmacies.edit', $pharmacy) }}" class="px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-[#0F172A] text-xs font-bold hover:bg-slate-100">
+                <i class="fas fa-edit mr-1.5 text-[#2F7E6A]"></i> Edit Pharmacy Details
+            </a>
+
+            <div class="flex flex-wrap items-center gap-3">
+                @if($pharmacy->status === 'pending')
+                    <form action="{{ route('admin.pharmacies.reject', $pharmacy->id) }}" method="POST" onsubmit="return confirm('Mark this application as rejected? The record will be preserved in audit history.');">
+                        @csrf
+                        @method('DELETE')
+                        <button type="submit" class="px-4 py-2.5 rounded-xl bg-white border border-rose-200 text-rose-700 hover:bg-rose-50 text-xs font-bold">
+                            <i class="fas fa-times mr-1"></i> Reject Application
+                        </button>
+                    </form>
+
+                    <form action="{{ route('admin.pharmacies.approve', $pharmacy->id) }}" method="POST">
+                        @csrf
+                        @method('PATCH')
+                        <button type="submit" {{ !$inAlijis ? 'disabled' : '' }}
+                                class="px-5 py-2.5 rounded-xl bg-[#2F7E6A] hover:bg-[#256655] disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold">
+                            <i class="fas fa-check mr-1"></i> Approve Partner Pharmacy
+                        </button>
+                    </form>
+                @elseif($pharmacy->status === 'suspended' && $pharmacy->is_approved && $inAlijis)
+                    <form action="{{ route('admin.pharmacies.restore', $pharmacy->id) }}" method="POST">
+                        @csrf
+                        @method('PATCH')
+                        <input type="hidden" name="reason" value="Restored from Pharmacy Review page by Super Admin.">
+                        <button type="submit" class="px-5 py-2.5 rounded-xl bg-[#2F7E6A] hover:bg-[#256655] text-white text-xs font-bold">
+                            <i class="fas fa-undo mr-1.5"></i> Restore Suspended Account
+                        </button>
+                    </form>
+                @endif
+            </div>
+        </div>
     </div>
-</body>
-</html>
+
+    <!-- Governance Audit History -->
+    <div class="bg-white rounded-2xl shadow-xs border border-slate-200/80 overflow-hidden">
+        <div class="px-6 py-4 bg-slate-50/70 border-b border-slate-100">
+            <h3 class="font-black text-[#0F172A] text-sm uppercase tracking-tight">
+                <i class="fas fa-history text-[#2F7E6A] mr-2"></i> Pharmacy Audit &amp; Governance Log
+            </h3>
+        </div>
+        <div class="divide-y divide-slate-100 text-xs">
+            @forelse($auditHistory ?? [] as $log)
+                <div class="px-6 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                        <span class="font-black text-[#0F172A]">{{ $log->action }}</span>
+                        <span class="text-[#64748B] ml-2">{{ $log->details }}</span>
+                    </div>
+                    <div class="text-[#64748B] font-medium shrink-0">
+                        {{ $log->user->name ?? 'System / Admin' }} &bull; {{ $log->created_at ? $log->created_at->format('M d, Y h:i A') : '' }}
+                    </div>
+                </div>
+            @empty
+                <div class="px-6 py-8 text-center text-[#64748B]">
+                    No audit log entries recorded for this pharmacy yet.
+                </div>
+            @endforelse
+        </div>
+    </div>
+@endsection

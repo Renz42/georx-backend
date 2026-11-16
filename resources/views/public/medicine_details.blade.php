@@ -84,11 +84,18 @@
                     <div class="w-full sm:w-64 h-64 bg-white rounded-3xl border border-geo-400 shadow-sm flex flex-col items-center justify-center shrink-0 p-6 relative overflow-hidden">
                         <div class="absolute inset-0 bg-gradient-to-br from-geo-100/50 to-transparent"></div>
                         @if($medicine->image_url)
-                            <img src="{{ $medicine->image_url }}" alt="Medicine" class="w-full h-full object-contain mix-blend-multiply relative z-10 hover:scale-110 transition-transform duration-500">
-                        @else
-                            <i class="fas fa-pills text-6xl mb-3 text-geo-500/30 relative z-10"></i>
-                            <span class="text-[10px] font-bold uppercase tracking-widest text-geo-600/50 relative z-10">No Photo</span>
+                            <img src="{{ $medicine->image_url }}"
+                                 data-original-src="{{ $medicine->image_url }}"
+                                 @if($medicine->fallback_image_url) data-fallback-src="{{ $medicine->fallback_image_url }}" @endif
+                                 data-retry-step="0"
+                                 alt="Medicine"
+                                 class="w-full h-full object-contain mix-blend-multiply relative z-10 hover:scale-110 transition-transform duration-500"
+                                 onerror="handleMedicineImageError(this)">
                         @endif
+                        <div data-image-placeholder class="{{ $medicine->image_url ? 'hidden' : 'flex' }} flex-col items-center justify-center relative z-10">
+                            <i class="fas fa-pills text-6xl mb-3 text-geo-500/30"></i>
+                            <span class="text-[10px] font-bold uppercase tracking-widest text-geo-600/50">No Photo</span>
+                        </div>
                     </div>
                     
                     <div class="flex-1 pt-2">
@@ -329,10 +336,15 @@
 
                         <div class="h-36 bg-geo-50 rounded-xl mb-4 flex items-center justify-center p-3 border border-geo-100 relative">
                             @if($item->image_url)
-                                <img src="{{ $item->image_url }}" alt="{{ $item->generic_name }}" class="h-full object-contain mix-blend-multiply group-hover:scale-110 transition-transform duration-500">
-                            @else
-                                <i class="fas fa-pills text-3xl text-geo-500/30"></i>
+                                <img src="{{ $item->image_url }}"
+                                     data-original-src="{{ $item->image_url }}"
+                                     @if($item->fallback_image_url) data-fallback-src="{{ $item->fallback_image_url }}" @endif
+                                     data-retry-step="0"
+                                     alt="{{ $item->generic_name }}"
+                                     class="h-full object-contain mix-blend-multiply group-hover:scale-110 transition-transform duration-500"
+                                     onerror="handleMedicineImageError(this)">
                             @endif
+                            <i data-image-placeholder class="{{ $item->image_url ? 'hidden' : '' }} fas fa-pills text-3xl text-geo-500/30"></i>
                         </div>
 
                         <div class="flex-1 flex flex-col">
@@ -388,5 +400,43 @@
         }
     </script>
     @endif
+    <script>
+        function handleMedicineImageError(img) {
+            if (!img) return;
+            const step = parseInt(img.dataset.retryStep || '0', 10);
+            const originalSrc = img.dataset.originalSrc || '';
+            const fallbackSrc = img.dataset.fallbackSrc || '';
+
+            if (step === 0 && originalSrc) {
+                img.dataset.retryStep = '1';
+                let retrySrc;
+                try {
+                    const parsedUrl = new URL(originalSrc, window.location.origin);
+                    parsedUrl.searchParams.set('retry', '1');
+                    retrySrc = parsedUrl.toString();
+                } catch (e) {
+                    const hashIdx = originalSrc.indexOf('#');
+                    const base = hashIdx === -1 ? originalSrc : originalSrc.slice(0, hashIdx);
+                    const hash = hashIdx === -1 ? '' : originalSrc.slice(hashIdx);
+                    retrySrc = base + (base.indexOf('?') === -1 ? '?' : '&') + 'retry=1' + hash;
+                }
+                setTimeout(function () { img.src = retrySrc; }, 250);
+                return;
+            }
+            if (step <= 1 && fallbackSrc && img.getAttribute('src') !== fallbackSrc) {
+                img.dataset.retryStep = '2';
+                img.src = fallbackSrc;
+                return;
+            }
+            img.dataset.retryStep = '3';
+            img.onerror = null;
+            img.classList.add('hidden');
+            const placeholder = img.parentElement ? img.parentElement.querySelector('[data-image-placeholder]') : null;
+            if (placeholder) {
+                placeholder.classList.remove('hidden');
+                if (placeholder.tagName === 'DIV') placeholder.classList.add('flex');
+            }
+        }
+    </script>
 </body>
 </html>

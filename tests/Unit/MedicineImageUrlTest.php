@@ -369,4 +369,29 @@ class MedicineImageUrlTest extends TestCase
         $this->assertArrayHasKey('Authorization', $headers2);
         $this->assertSame("Bearer {$jwt}", $headers2['Authorization']);
     }
+
+    /**
+     * Test 21: Same-origin fallback image URL resolves managed medicine-images objects without altering API serialization.
+     */
+    public function test_fallback_image_url_resolves_same_origin_proxy_without_changing_api_serialization(): void
+    {
+        Config::set('services.supabase.url', 'https://aqzeibjljgvzvgpobbkx.supabase.co');
+
+        $fullUrl = 'https://aqzeibjljgvzvgpobbkx.supabase.co/storage/v1/object/public/medicine-images/4d7433a4-d24b-436d-b1d9-f9ad46d672e2.jpg';
+        $medFull = new Medicine(['image' => $fullUrl]);
+        $this->assertSame('/medicine-images/4d7433a4-d24b-436d-b1d9-f9ad46d672e2.jpg', $medFull->fallback_image_url);
+        $this->assertArrayNotHasKey('fallback_image_url', $medFull->toArray());
+
+        $medRel = new Medicine(['image' => 'medicine-images/4d7433a4-d24b-436d-b1d9-f9ad46d672e2.jpg']);
+        $this->assertSame('/medicine-images/4d7433a4-d24b-436d-b1d9-f9ad46d672e2.jpg', $medRel->fallback_image_url);
+
+        $medExternal = new Medicine(['image' => 'https://example.com/photo.jpg']);
+        $this->assertNull($medExternal->fallback_image_url);
+
+        $medLegacy = new Medicine(['image' => 'medicines/legacy.png']);
+        $this->assertNull($medLegacy->fallback_image_url);
+
+        $medNull = new Medicine(['image' => null]);
+        $this->assertNull($medNull->fallback_image_url);
+    }
 }

@@ -56,16 +56,21 @@
                     <form action="{{ (request()->routeIs('portal.*') || request()->is('portal/*')) ? route('portal.catalog.update', $medicine->id) : route('pharmacy.catalog.update', $medicine->id) }}" method="POST" enctype="multipart/form-data" class="flex flex-col h-full">
                         @csrf
                         
-                        <div class="h-48 bg-slate-50 border-b border-slate-100 relative group flex items-center justify-center">
+                        <div class="h-48 bg-slate-50 border-b border-slate-100 relative group flex items-center justify-center p-4 overflow-hidden">
                             @if($medicine->image_url)
-                                <img src="{{ $medicine->image_url }}" alt="{{ $medicine->generic_name ?? 'Medicine Photo' }}" class="w-full h-full object-cover">
-                            @else
-                                <div class="text-center opacity-60 group-hover:opacity-100 transition-opacity">
-                                    <i class="fas fa-camera text-3xl text-slate-400 mb-2 block"></i>
-                                    <span class="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">No Photo</span>
-                                    <span class="text-[10px] font-medium text-slate-400 mt-1 block">JPG, PNG, WEBP &bull; Max 2MB</span>
-                                </div>
+                                <img src="{{ $medicine->image_url }}"
+                                     data-original-src="{{ $medicine->image_url }}"
+                                     @if($medicine->fallback_image_url) data-fallback-src="{{ $medicine->fallback_image_url }}" @endif
+                                     data-retry-step="0"
+                                     alt="{{ $medicine->generic_name ?? 'Medicine Photo' }}"
+                                     class="w-full h-full object-contain object-center transition-transform duration-300"
+                                     onerror="handleCatalogImageError(this)">
                             @endif
+                            <div data-image-placeholder class="{{ $medicine->image_url ? 'hidden' : '' }} text-center opacity-60 group-hover:opacity-100 transition-opacity">
+                                <i class="fas fa-camera text-3xl text-slate-400 mb-2 block"></i>
+                                <span class="text-[10px] font-bold uppercase tracking-widest text-slate-500 block">No Photo</span>
+                                <span class="text-[10px] font-medium text-slate-400 mt-1 block">JPG, PNG, WEBP &bull; Max 2MB</span>
+                            </div>
                             
                             <input type="file" id="image_{{ $medicine->id }}" name="image" accept="image/jpeg,image/png,image/webp" class="hidden" onchange="handleCatalogImageSelect(this)">
                             
@@ -109,6 +114,53 @@
 
 @push('scripts')
 <script>
+    function handleCatalogImageError(img) {
+        if (!img) {
+            return;
+        }
+
+        const step = parseInt(img.dataset.retryStep || '0', 10);
+        const originalSrc = img.dataset.originalSrc || '';
+        const fallbackSrc = img.dataset.fallbackSrc || '';
+
+        if (step === 0 && originalSrc) {
+            img.dataset.retryStep = '1';
+            let retrySrc;
+            try {
+                const parsedUrl = new URL(originalSrc, window.location.origin);
+                parsedUrl.searchParams.set('retry', '1');
+                retrySrc = parsedUrl.toString();
+            } catch (e) {
+                const hashIdx = originalSrc.indexOf('#');
+                const base = hashIdx === -1 ? originalSrc : originalSrc.slice(0, hashIdx);
+                const hash = hashIdx === -1 ? '' : originalSrc.slice(hashIdx);
+                retrySrc = base + (base.indexOf('?') === -1 ? '?' : '&') + 'retry=1' + hash;
+            }
+            setTimeout(function () {
+                img.src = retrySrc;
+            }, 250);
+            return;
+        }
+
+        if (step <= 1 && fallbackSrc && img.getAttribute('src') !== fallbackSrc) {
+            img.dataset.retryStep = '2';
+            img.src = fallbackSrc;
+            return;
+        }
+
+        img.dataset.retryStep = '3';
+        img.onerror = null;
+        img.classList.add('hidden');
+
+        const container = img.parentElement;
+        if (container) {
+            const placeholder = container.querySelector('[data-image-placeholder]');
+            if (placeholder) {
+                placeholder.classList.remove('hidden');
+            }
+        }
+    }
+
     function showCatalogUploadError(message) {
         const box = document.getElementById('catalogUploadClientError');
         const text = document.getElementById('catalogUploadClientErrorText');

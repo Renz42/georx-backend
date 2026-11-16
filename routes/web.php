@@ -36,6 +36,12 @@ Route::get('/pharmacy/{id}/profile', [PharmacyController::class, 'publicProfile'
 // NEW: Public Medicine Details
 Route::get('/pharmacy/{pharmacy_id}/medicine/{medicine_id}', [PharmacyController::class, 'publicMedicineDetails'])->name('medicine.details');
 
+// Same-origin read-only fallback proxy for public medicine images in Supabase Storage
+Route::get('/medicine-images/{filename}', [PortalController::class, 'serveMedicineImage'])
+    ->where('filename', '[A-Za-z0-9._-]+')
+    ->middleware('throttle:120,1')
+    ->name('medicine.image.proxy');
+
 // =============================================
 // AUTHENTICATION & REGISTRATION ROUTES (Guests Only)
 // =============================================
@@ -94,6 +100,7 @@ Route::prefix('admin')->middleware(['auth:admin', 'role:administrator'])->group(
     
     // ✅ NEW: User Management Routes
     Route::get('/users', [AdminController::class, 'usersIndex'])->name('admin.users');
+    Route::patch('/users/{id}/status', [AdminController::class, 'toggleUserStatus'])->name('admin.users.status');
     Route::delete('/users/{id}', [AdminController::class, 'destroyUser'])->name('admin.users.destroy');
     
     // Read-only medicine list
@@ -102,11 +109,12 @@ Route::prefix('admin')->middleware(['auth:admin', 'role:administrator'])->group(
     // Pharmacy management
     Route::get('/pharmacies', [AdminController::class, 'pharmacies'])->name('admin.pharmacies');
     
-    // Approval Workflow & Suspension
+    // Approval Workflow, Suspension & Restoration
     Route::get('/pharmacies/{pharmacy}/review', [AdminController::class, 'reviewPharmacy'])->name('admin.pharmacies.review');
     Route::patch('/pharmacies/{pharmacy}/approve', [AdminController::class, 'approvePharmacy'])->name('admin.pharmacies.approve');
     Route::delete('/pharmacies/{pharmacy}/reject', [AdminController::class, 'rejectPharmacy'])->name('admin.pharmacies.reject');
     Route::patch('/pharmacies/{pharmacy}/suspend', [AdminController::class, 'suspendPharmacy'])->name('admin.pharmacies.suspend');
+    Route::patch('/pharmacies/{pharmacy}/restore', [AdminController::class, 'restorePharmacy'])->name('admin.pharmacies.restore');
     
     // Editing and Inventory Auditing
     Route::get('/pharmacies/{pharmacy}/edit', [AdminController::class, 'editPharmacy'])->name('admin.pharmacies.edit');

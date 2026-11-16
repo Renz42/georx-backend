@@ -694,6 +694,188 @@ class PortalController extends Controller
         return view('pharmacy.catalog', compact('medicines'));
     }
 
+    /**
+     * Same-origin read-only fallback proxy for public medicine images in Supabase Storage.
+     * Used only when a web browser fails to load the direct Supabase public URL.
+     */
+    public function serveMedicineImage(string $filename)
+    {
+        $filename = trim($filename);
+
+        if (
+            $filename === '' ||
+            str_contains($filename, '..') ||
+            str_contains($filename, '/') ||
+            str_contains($filename, '\\') ||
+            !preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]{0,120}\.(jpg|jpeg|png|webp|gif)$/i', $filename)
+        ) {
+            abort(404);
+        }
+
+        $bucket = \App\Services\SupabaseStorageService::BUCKET_MEDICINE_IMAGES;
+        $maxBytes = 5 * 1024 * 1024; // 5 MB ceiling
+        $chunkSize = 8192; // 8 KB incremental read chunk
+
+        $canonicalizeAllowedMime = static function (?string $mime): ?string {
+            $normalized = strtolower(trim(explode(';', (string) $mime)[0]));
+            if ($normalized === '' || !in_array($normalized, \App\Services\SupabaseStorageService::ALLOWED_IMAGE_MIMES, true)) {
+                return null;
+            }
+
+            return match ($normalized) {
+                'image/jpeg', 'image/jpg', 'image/pjpeg' => 'image/jpeg',
+                'image/png' => 'image/png',
+                'image/webp' => 'image/webp',
+                'image/gif' => 'image/gif',
+                default => null,
+            };
+        };
+
+        $supabaseUrl = \App\Services\SupabaseStorageService::normalizeSupabaseUrl(config('services.supabase.url'));
+
+        if ($supabaseUrl !== null) {
+            $expectedHost = parse_url($supabaseUrl, PHP_URL_HOST);
+            $upstreamUrl = "{$supabaseUrl}/storage/v1/object/public/{$bucket}/" . rawurlencode($filename);
+
+            if (empty($expectedHost) || parse_url($upstreamUrl, PHP_URL_HOST) !== $expectedHost) {
+                abort(404);
+            }
+
+            $stream = null;
+
+            try {
+                $response = \Illuminate\Support\Facades\Http::connectTimeout(5)
+                    ->timeout(15)
+                    ->withOptions([
+                        'allow_redirects' => false,
+                        'stream' => true,
+                        'read_timeout' => 15,
+                    ])
+                    ->get($upstreamUrl);
+
+                $psrResponse = $response->toPsrResponse();
+                $stream = $psrResponse->getBody();
+
+                if (!$response->successful()) {
+                    abort(404);
+                }
+
+                foreach ($psrResponse->getHeader('Content-Length') as $headerValue) {
+                    $trimmedLength = trim((string) $headerValue);
+                    if ($trimmedLength !== '') {
+                        if (!ctype_digit($trimmedLength)) {
+                            abort(404);
+                        }
+                        $parsedLength = (int) $trimmedLength;
+                        if ($parsedLength <= 0 || $parsedLength > $maxBytes) {
+                            abort(404);
+                        }
+                    }
+                }
+
+                $headerCanonicalMime = $canonicalizeAllowedMime($response->header('Content-Type'));
+                if ($headerCanonicalMime === null) {
+                    abort(404);
+                }
+
+                $body = '';
+                $bytesRead = 0;
+
+                while (!$stream->eof()) {
+                    $remainingAllowance = ($maxBytes + 1) - $bytesRead;
+                    $readLength = $remainingAllowance < $chunkSize ? $remainingAllowance : $chunkSize;
+                    $chunk = $stream->read($readLength);
+
+                    if ($chunk === '') {
+                        if ($stream->getMetadata('timed_out') === true || !$stream->eof()) {
+                            abort(404);
+                        }
+                        break;
+                    }
+
+                    $chunkLength = strlen($chunk);
+                    $bytesRead += $chunkLength;
+
+                    if ($bytesRead > $maxBytes) {
+                        abort(404);
+                    }
+
+                    $body .= $chunk;
+                }
+
+                if ($bytesRead === 0 || $body === '') {
+                    abort(404);
+                }
+
+                if (!function_exists('finfo_open') || !function_exists('finfo_buffer')) {
+                    abort(404);
+                }
+
+                $finfo = @finfo_open(FILEINFO_MIME_TYPE);
+                if ($finfo === false) {
+                    abort(404);
+                }
+
+                $detectedRawMime = @finfo_buffer($finfo, $body);
+                @finfo_close($finfo);
+
+                $detectedCanonicalMime = is_string($detectedRawMime) ? $canonicalizeAllowedMime($detectedRawMime) : null;
+                if ($detectedCanonicalMime === null || $detectedCanonicalMime !== $headerCanonicalMime) {
+                    abort(404);
+                }
+
+                return response($body, 200, [
+                    'Content-Type' => $detectedCanonicalMime,
+                    'Content-Length' => (string) $bytesRead,
+                    'Cache-Control' => 'public, max-age=86400, stale-while-revalidate=3600',
+                    'X-Content-Type-Options' => 'nosniff',
+                ]);
+            } catch (\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $e) {
+                throw $e;
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Same-origin medicine image proxy fetch failed', [
+                    'filename' => $filename,
+                    'error' => $e->getMessage(),
+                ]);
+                abort(404);
+            } finally {
+                if ($stream instanceof \Psr\Http\Message\StreamInterface) {
+                    try {
+                        $stream->close();
+                    } catch (\Throwable) {
+                    }
+                }
+            }
+        }
+
+        if (!app()->environment('production')) {
+            $localPath = "{$bucket}/{$filename}";
+            if (\Illuminate\Support\Facades\Storage::disk('public')->exists($localPath)) {
+                $fullPath = \Illuminate\Support\Facades\Storage::disk('public')->path($localPath);
+                if (is_file($fullPath) && filesize($fullPath) > 0 && filesize($fullPath) <= $maxBytes) {
+                    $localMime = null;
+                    if (function_exists('finfo_open') && function_exists('finfo_file')) {
+                        $finfo = @finfo_open(FILEINFO_MIME_TYPE);
+                        if ($finfo !== false) {
+                            $rawLocalMime = @finfo_file($finfo, $fullPath);
+                            @finfo_close($finfo);
+                            $localMime = is_string($rawLocalMime) ? $canonicalizeAllowedMime($rawLocalMime) : null;
+                        }
+                    }
+                    if ($localMime !== null) {
+                        return response()->file($fullPath, [
+                            'Content-Type' => $localMime,
+                            'Cache-Control' => 'public, max-age=3600',
+                            'X-Content-Type-Options' => 'nosniff',
+                        ]);
+                    }
+                }
+            }
+        }
+
+        abort(404);
+    }
+
     // Handle Image Uploads and Description Updates
     public function updateCatalog(Request $request, $id)
     {

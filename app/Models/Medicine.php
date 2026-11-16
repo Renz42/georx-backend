@@ -84,6 +84,36 @@ class Medicine extends Model
     }
 
     /**
+     * Get a same-origin fallback path (/medicine-images/{filename}) for managed Supabase medicine images.
+     * Deliberately omitted from $appends so API JSON response structures remain unchanged.
+     */
+    public function getFallbackImageUrlAttribute(): ?string
+    {
+        if (empty($this->image) || trim($this->image) === '' || !class_exists(\App\Services\SupabaseStorageService::class)) {
+            return null;
+        }
+
+        $bucket = \App\Services\SupabaseStorageService::BUCKET_MEDICINE_IMAGES;
+        $objectKey = \App\Services\SupabaseStorageService::extractObjectKey(
+            $bucket,
+            $this->image,
+            \App\Services\SupabaseStorageService::normalizeSupabaseUrl(config('services.supabase.url'))
+        );
+
+        if (
+            $objectKey === null ||
+            str_contains($objectKey, '..') ||
+            str_contains($objectKey, '/') ||
+            str_contains($objectKey, '\\') ||
+            !preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]{0,120}\.(jpg|jpeg|png|webp|gif)$/i', $objectKey)
+        ) {
+            return null;
+        }
+
+        return '/medicine-images/' . rawurlencode($objectKey);
+    }
+
+    /**
      * Pharmacies that stock this medicine (with inventory pivot data)
      */
     public function pharmacies(): BelongsToMany
