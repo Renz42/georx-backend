@@ -20,14 +20,6 @@
         </div>
     @endif
 
-    <!-- Success Messages -->
-    @if(session('success'))
-        <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 px-5 py-4 rounded-2xl mb-8 flex items-center shadow-sm">
-            <i class="fas fa-check-circle mr-3 text-emerald-500 text-lg"></i>
-            <span class="font-bold">{{ session('success') }}</span>
-        </div>
-    @endif
-
     <!-- Clean Enterprise Welcome Banner -->
     <div class="bg-white rounded-2xl p-6 sm:p-8 mb-8 shadow-xs border border-slate-200/80">
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">

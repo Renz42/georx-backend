@@ -197,21 +197,9 @@
 
             <!-- Balanced Main Container -->
             <main class="flex-1 min-w-0 w-full">
+                @include('partials.flash-notifications', ['topOffsetClass' => 'top-[70px] lg:top-5'])
+
                 <div class="max-w-[1440px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                    @if(session('success'))
-                        <div class="bg-[#E9F7F2] border border-[#63C6A7]/50 text-[#2F7E6A] px-4 py-3 rounded-2xl mb-5 flex items-center shadow-2xs text-sm font-semibold">
-                            <i class="fas fa-check-circle mr-2.5 shrink-0"></i>
-                            <span>{{ session('success') }}</span>
-                        </div>
-                    @endif
-
-                    @if(session('error'))
-                        <div class="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 rounded-2xl mb-5 flex items-center shadow-2xs text-sm font-semibold">
-                            <i class="fas fa-exclamation-circle mr-2.5 text-rose-500 shrink-0"></i>
-                            <span>{{ session('error') }}</span>
-                        </div>
-                    @endif
-
                     @yield('content')
                 </div>
             </main>

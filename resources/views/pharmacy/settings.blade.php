@@ -13,13 +13,6 @@
             </div>
         </div>
 
-        @if(session('success'))
-            <div class="bg-emerald-50 border border-emerald-200 text-emerald-800 px-5 py-3.5 rounded-2xl mb-8 flex items-center shadow-2xs font-bold text-xs sm:text-sm animate-pulse-once">
-                <i class="fas fa-check-circle mr-3 text-emerald-600 text-lg"></i>
-                {{ session('success') }}
-            </div>
-        @endif
-
         @if($errors->any())
             <div class="bg-red-50 border border-red-200 text-red-800 px-5 py-3.5 rounded-2xl mb-8 flex items-start shadow-2xs font-semibold text-xs sm:text-sm">
                 <i class="fas fa-exclamation-circle mr-3 mt-0.5 text-red-600 text-lg shrink-0"></i>

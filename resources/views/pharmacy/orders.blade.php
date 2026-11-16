@@ -37,21 +37,6 @@
     </div>
 </div>
 
-<!-- Flash Session Alerts -->
-@if(session('success'))
-    <div class="mb-5 p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl flex items-center gap-3 text-xs font-bold shadow-2xs">
-        <i class="fas fa-check-circle text-emerald-600 text-sm shrink-0"></i>
-        <span>{{ session('success') }}</span>
-    </div>
-@endif
-
-@if(session('error'))
-    <div class="mb-5 p-4 bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl flex items-center gap-3 text-xs font-bold shadow-2xs">
-        <i class="fas fa-exclamation-circle text-rose-600 text-sm shrink-0"></i>
-        <span>{{ session('error') }}</span>
-    </div>
-@endif
-
 <!-- Status Filters (Image 2: Deep Pine Active Filter #0D7A5F with Translucent Counter) -->
 <div class="flex gap-2.5 overflow-x-auto custom-scrollbar pb-2 mb-6">
     @php

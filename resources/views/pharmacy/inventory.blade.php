@@ -32,19 +32,6 @@
 @endpush
 
 @section('content')
-    @if(session('success'))
-        <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 px-5 py-4 rounded-2xl mb-6 flex items-center shadow-sm">
-            <i class="fas fa-check-circle mr-3 text-emerald-500 text-lg"></i>
-            <span class="font-bold">{{ session('success') }}</span>
-        </div>
-    @endif
-    @if(session('error'))
-        <div class="bg-rose-50 border border-rose-200 text-rose-700 px-5 py-4 rounded-2xl mb-6 flex items-center shadow-sm">
-            <i class="fas fa-exclamation-circle mr-3 text-rose-500 text-lg"></i>
-            <span class="font-bold">{{ session('error') }}</span>
-        </div>
-    @endif
-
     <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div>
             <p class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1">Stock Management</p>

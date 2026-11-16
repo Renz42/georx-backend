@@ -12,27 +12,6 @@
             </div>
         </div>
 
-        @if(session('success'))
-            <div class="bg-emerald-50 border border-emerald-200 text-emerald-800 px-5 py-3.5 rounded-2xl mb-6 flex items-center shadow-2xs font-bold text-xs sm:text-sm">
-                <i class="fas fa-check-circle mr-3 text-emerald-600 text-lg"></i>
-                {{ session('success') }}
-            </div>
-        @endif
-
-        @if(session('warning'))
-            <div class="bg-amber-50 border border-amber-200 text-amber-800 px-5 py-3.5 rounded-2xl mb-6 flex items-center shadow-2xs font-bold text-xs sm:text-sm">
-                <i class="fas fa-exclamation-triangle mr-3 text-amber-600 text-lg"></i>
-                <span>{{ session('warning') }}</span>
-            </div>
-        @endif
-
-        @if(session('error'))
-            <div class="bg-rose-50 border border-rose-200 text-rose-800 px-5 py-3.5 rounded-2xl mb-6 flex items-center shadow-2xs font-bold text-xs sm:text-sm">
-                <i class="fas fa-exclamation-circle mr-3 text-rose-600 text-lg"></i>
-                <span>{{ session('error') }}</span>
-            </div>
-        @endif
-
         @if($errors->any())
             <div class="bg-rose-50 border border-rose-200 text-rose-800 px-5 py-3.5 rounded-2xl mb-8 flex items-center shadow-2xs font-bold text-xs sm:text-sm">
                 <i class="fas fa-exclamation-circle mr-3 text-rose-600 text-lg"></i>
