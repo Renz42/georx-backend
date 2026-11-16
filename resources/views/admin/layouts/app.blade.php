@@ -58,8 +58,8 @@
                 <!-- Brand Header -->
                 <div class="px-5 h-[72px] border-b border-[#E2E8F0] flex items-center justify-between shrink-0">
                     <a href="{{ route('admin.dashboard') }}" class="flex items-center gap-3 min-w-0">
-                        <div class="bg-[#2F7E6A] text-white w-9 h-9 rounded-xl flex items-center justify-center shadow-xs shrink-0">
-                            <i class="fas fa-shield-alt text-sm"></i>
+                        <div class="w-9 h-9 rounded-xl bg-white border border-[#E2E8F0] p-1 shadow-2xs flex items-center justify-center shrink-0">
+                            <img src="{{ asset('images/georx-logo.png') }}" alt="GEORX Logo" class="w-full h-full object-contain">
                         </div>
                         <div class="min-w-0">
                             <span class="block text-base font-extrabold text-[#0F172A] tracking-tight leading-none">GEORX</span>
@@ -107,12 +107,6 @@
                                 <span>Users</span>
                             </a>
 
-                            <a href="{{ route('admin.medicines') }}"
-                               class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all {{ request()->routeIs('admin.medicines*') ? 'bg-[#E9F7F2] text-[#2F7E6A] border border-[#63C6A7]/40 shadow-2xs' : 'text-[#64748B] hover:bg-slate-50 hover:text-[#0F172A]' }}">
-                                <i class="fas fa-pills w-4 text-center text-xs {{ request()->routeIs('admin.medicines*') ? 'text-[#2F7E6A]' : 'text-slate-400' }}"></i>
-                                <span>Medicines</span>
-                            </a>
-
                             <a href="{{ route('admin.reports') }}"
                                class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all {{ request()->routeIs('admin.reports') ? 'bg-[#E9F7F2] text-[#2F7E6A] border border-[#63C6A7]/40 shadow-2xs' : 'text-[#64748B] hover:bg-slate-50 hover:text-[#0F172A]' }}">
                                 <i class="fas fa-chart-bar w-4 text-center text-xs {{ request()->routeIs('admin.reports') ? 'text-[#2F7E6A]' : 'text-slate-400' }}"></i>
@@ -129,12 +123,6 @@
                                class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all {{ request()->routeIs('admin.settings') ? 'bg-[#E9F7F2] text-[#2F7E6A] border border-[#63C6A7]/40 shadow-2xs' : 'text-[#64748B] hover:bg-slate-50 hover:text-[#0F172A]' }}">
                                 <i class="fas fa-sliders-h w-4 text-center text-xs {{ request()->routeIs('admin.settings') ? 'text-[#2F7E6A]' : 'text-slate-400' }}"></i>
                                 <span>Settings</span>
-                            </a>
-
-                            <a href="{{ url('/') }}"
-                               class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold text-[#64748B] hover:bg-slate-50 hover:text-[#0F172A] transition-all">
-                                <i class="fas fa-globe w-4 text-center text-xs text-slate-400"></i>
-                                <span>Public Map</span>
                             </a>
                         </div>
                     </div>

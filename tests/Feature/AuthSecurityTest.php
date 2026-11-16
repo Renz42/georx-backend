@@ -1008,13 +1008,19 @@ class AuthSecurityTest extends TestCase
             ->get(route('admin.dashboard'));
 
         $response->assertStatus(200)
+            ->assertSee(asset('images/georx-logo.png'), false)
+            ->assertSee('alt="GEORX Logo"', false)
+            ->assertDontSee('fa-shield-alt', false)
             ->assertDontSee(route('admin.drivers'), false)
             ->assertDontSee('fa-motorcycle', false)
             ->assertDontSee('>Archive<', false)
+            ->assertDontSee(route('admin.medicines'), false)
+            ->assertDontSee('>Medicines<', false)
+            ->assertDontSee('href="' . url('/') . '"', false)
+            ->assertDontSee('>Public Map<', false)
             ->assertSee(route('admin.dashboard'), false)
             ->assertSee(route('admin.pharmacies'), false)
             ->assertSee(route('admin.users'), false)
-            ->assertSee(route('admin.medicines'), false)
             ->assertSee(route('admin.reports'), false)
             ->assertSee(route('admin.settings'), false);
     }
