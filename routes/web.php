@@ -177,6 +177,7 @@ $pharmacyPortalRoutes = function () {
     Route::post('/orders/{id}/reject', [PortalController::class, 'rejectOrder'])->name('orders.reject');
     Route::post('/orders/{id}/prepare', [PortalController::class, 'prepareOrder'])->name('orders.prepare');
     Route::post('/orders/{id}/book-delivery', [PortalController::class, 'bookDelivery'])->name('orders.book-delivery');
+    Route::post('/orders/{id}/courier-fee', [PortalController::class, 'updateCourierFee'])->name('orders.courier-fee');
     Route::post('/orders/{id}/delivery-status', [PortalController::class, 'updateDeliveryStatus'])->name('orders.delivery-status');
 
     // Inventory Batch Management & Analytics

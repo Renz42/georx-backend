@@ -18,31 +18,20 @@
         .items-table th { background-color: #f8fafc; font-size: 12px; color: #475569; text-transform: uppercase; }
         .totals-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
         .totals-table td { padding: 8px 10px; text-align: right; }
-        .totals-table .label { font-weight: bold; color: #64748b; font-size: 12px; text-transform: uppercase; width: 80%; }
+        .totals-table .label { font-weight: bold; color: #64748b; font-size: 12px; text-transform: uppercase; width: 75%; }
         .totals-table .value { font-weight: bold; color: #0f172a; }
-        .totals-table .grand-total .label, .totals-table .grand-total .value { font-size: 18px; color: #1e40af; border-top: 2px solid #1e40af; padding-top: 15px; }
-        .footer { text-align: center; font-size: 11px; color: #94a3b8; margin-top: 50px; border-top: 1px solid #e2e8f0; padding-top: 20px; }
+        .totals-table .grand-total .label, .totals-table .grand-total .value { font-size: 17px; color: #1e40af; border-top: 2px solid #1e40af; padding-top: 15px; }
+        .footer { text-align: center; font-size: 11px; color: #64748b; margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 20px; line-height: 1.5; }
         .status-badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; text-transform: uppercase; background-color: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; margin-top: 10px; }
     </style>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: { sans: ['Outfit', 'sans-serif'] },
-                    colors: {
-                        geo: { 900: '#0F172A', 800: '#1E293B', 700: '#1F2E2C', 600: '#2F7E6A', 500: '#63C6A7', 400: '#BFE8D6', 300: '#A0D8C4', 100: '#E9F7F2', 50: '#F8FAFC' }
-                    }
-                }
-            }
-        }
-    </script></head>
+</head>
 <body>
+    @php $pricing = $pricing ?? $order->pricingSummary(); @endphp
 
     <div class="header">
         <h1>GEORX: A Medicine Hub Portal</h1>
         <p>Official Order Receipt</p>
-        <div class="status-badge">PAID</div>
+        <div class="status-badge">{{ $order->status === 'delivered' ? 'DELIVERED (COD)' : strtoupper(str_replace('_', ' ', $order->status)) }}</div>
     </div>
 
     <div class="receipt-info">
@@ -67,6 +56,17 @@
                 <td class="label">Delivery Address:</td>
                 <td class="value">{{ $order->delivery_address }}</td>
             </tr>
+            @if($order->delivery_provider)
+            <tr>
+                <td class="label">Courier Partner:</td>
+                <td class="value">
+                    {{ $order->delivery_provider === 'grab' ? 'Grab Express' : 'Maxim Delivery' }}
+                    @if($order->delivery_booking_id)
+                        (Ref: {{ $order->delivery_booking_id }})
+                    @endif
+                </td>
+            </tr>
+            @endif
         </table>
     </div>
 
@@ -96,22 +96,22 @@
 
     <table class="totals-table">
         <tr>
-            <td class="label">Subtotal:</td>
-            <td class="value">P{{ number_format($order->total_amount - $order->delivery_fee, 2) }}</td>
+            <td class="label">Medicine Subtotal:</td>
+            <td class="value">P{{ number_format($pricing['medicine_subtotal'], 2) }}</td>
         </tr>
         <tr>
             <td class="label">Delivery Fee:</td>
-            <td class="value">P{{ number_format($order->delivery_fee, 2) }}</td>
+            <td class="value">P{{ number_format($pricing['estimated_delivery_fee'], 2) }}</td>
         </tr>
         <tr class="grand-total">
-            <td class="label">Total Amount:</td>
-            <td class="value">P{{ number_format($order->total_amount, 2) }}</td>
+            <td class="label">Customer Payable Amount (COD):</td>
+            <td class="value">P{{ number_format($pricing['customer_payable_amount'], 2) }}</td>
         </tr>
     </table>
 
     <div class="footer">
         <p>Thank you for choosing GEORX!</p>
-        <p>This receipt is system generated and serves as official proof of purchase.</p>
+        <p>Customer COD payable reflects the confirmed order total (Medicine Subtotal + Delivery Fee) with no additional courier surcharge.</p>
     </div>
 
 </body>

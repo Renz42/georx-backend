@@ -14,6 +14,8 @@
     $cancelledOrderCount = (int) ($rejectedOrCancelledOrders ?? 0);
     $medicineGmvValue = (float) ($medicineSalesGmv ?? 0);
     $courierFeesValue = (float) ($estimatedDeliveryFees ?? 0);
+    $actualCourierFeesValue = (float) ($recordedActualCourierFees ?? 0);
+    $actualCourierFeesCount = (int) ($recordedActualCourierCount ?? 0);
 
     $registeredUsersCount = (int) ($stats['users'] ?? 0);
     $verifiedUsersCount = (int) ($stats['verified_users'] ?? 0);
@@ -167,7 +169,16 @@
             <p class="mt-4 pt-3 border-t border-[#E2E8F0] text-xs text-[#64748B]">
                 Medicine GMV: <span class="font-semibold text-[#0F172A]">₱{{ number_format($medicineGmvValue, 2) }}</span>
                 <span class="mx-1.5 text-slate-300">·</span>
-                Courier Fees: <span class="font-semibold text-[#0F172A]">₱{{ number_format($courierFeesValue, 2) }}</span>
+                Order Delivery Fees: <span class="font-semibold text-[#0F172A]">₱{{ number_format($courierFeesValue, 2) }}</span>
+                @if($actualCourierFeesCount > 0)
+                    <span class="block mt-1 text-[11px] text-[#64748B]">
+                        Internal Courier Expense ({{ $actualCourierFeesCount }}): <span class="font-semibold text-[#0F172A]">₱{{ number_format($actualCourierFeesValue, 2) }}</span>
+                    </span>
+                @else
+                    <span class="block mt-1 text-[11px] text-[#64748B]">
+                        Internal Courier Expense: <span class="italic">Pending courier confirmation</span>
+                    </span>
+                @endif
             </p>
         </article>
 
@@ -435,7 +446,14 @@
                             $orderCode = '#' . str_pad((string) ($order->id ?? 0), 5, '0', STR_PAD_LEFT);
                             $customerLabel = $order->user->name ?? 'Customer';
                             $pharmacyLabel = $order->pharmacy->name ?? 'Pharmacy';
-                            $orderAmount = (float) ($order->total_amount ?? $order->total ?? 0);
+                            $orderPricing = method_exists($order, 'pricingSummary') ? $order->pricingSummary() : [
+                                'medicine_subtotal' => max(0, (float) ($order->total_amount ?? 0) - (float) ($order->delivery_fee ?? 0)),
+                                'estimated_delivery_fee' => (float) ($order->delivery_fee ?? 0),
+                                'actual_courier_fee' => $order->actual_courier_fee !== null ? (float) $order->actual_courier_fee : null,
+                                'has_actual_courier_fee' => $order->actual_courier_fee !== null,
+                                'customer_payable_amount' => (float) ($order->total_amount ?? $order->total ?? 0),
+                            ];
+                            $orderAmount = (float) $orderPricing['customer_payable_amount'];
                             $rawStatus = strtoupper((string) ($order->status ?? 'UNKNOWN'));
 
                             $statusClasses = match ($rawStatus) {
@@ -453,6 +471,14 @@
                                         {{ $customerLabel }} &rarr; {{ $pharmacyLabel }}
                                     </span>
                                 </div>
+                                <p class="text-[11px] text-[#64748B] mt-0.5 truncate">
+                                    Med ₱{{ number_format($orderPricing['medicine_subtotal'], 2) }} · Del ₱{{ number_format($orderPricing['estimated_delivery_fee'], 2) }}
+                                    @if($orderPricing['has_actual_courier_fee'])
+                                        · Courier Exp ₱{{ number_format($orderPricing['actual_courier_fee'], 2) }}
+                                    @else
+                                        · Courier Exp Pending
+                                    @endif
+                                </p>
                             </div>
                             <div class="flex items-center gap-2 shrink-0">
                                 <span class="text-xs font-bold text-[#0F172A]">₱{{ number_format($orderAmount, 2) }}</span>

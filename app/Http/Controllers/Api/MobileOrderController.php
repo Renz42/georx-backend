@@ -18,16 +18,25 @@ class MobileOrderController extends Controller
         $user = $request->user();
 
         $orders = Order::where('user_id', $user->id)
-            ->with(['pharmacy:id,name,address,phone', 'items.medicine:id,generic_name,brand_name', 'delivery'])
+            ->with(['pharmacy:id,name,address,phone', 'items:id,order_id,medicine_id,quantity,price', 'items.medicine:id,generic_name,brand_name', 'delivery'])
             ->orderBy('created_at', 'desc')
             ->get()
             ->map(function ($order) {
+                $pricing = $order->pricingSummary();
+
                 return [
                     'id' => $order->id,
                     'order_number' => '#' . (10000 + $order->id),
                     'status' => $order->status,
                     'status_label' => ucwords(str_replace('_', ' ', $order->status)),
                     'total_amount' => (float)$order->total_amount,
+                    'delivery_fee' => $pricing['estimated_delivery_fee'],
+                    'medicine_subtotal' => $pricing['medicine_subtotal'],
+                    'estimated_delivery_fee' => $pricing['estimated_delivery_fee'],
+                    'actual_courier_fee' => $pricing['actual_courier_fee'],
+                    'has_actual_courier_fee' => $pricing['has_actual_courier_fee'],
+                    'courier_fee_status' => $pricing['courier_fee_status'],
+                    'customer_payable_amount' => $pricing['customer_payable_amount'],
                     'delivery_address' => $order->delivery_address,
                     'created_at' => $order->created_at ? $order->created_at->format('M d, Y g:i A') : null,
                     'created_at_iso' => $order->created_at ? $order->created_at->toIso8601String() : null,
@@ -63,6 +72,7 @@ class MobileOrderController extends Controller
 
         $isDelivered = $order->status === Order::STATUS_DELIVERED;
         $review = $order->review;
+        $pricing = $order->pricingSummary();
 
         return response()->json([
             'status' => 'success',
@@ -81,8 +91,18 @@ class MobileOrderController extends Controller
                 'has_review' => (bool)$review,
                 'review_rating' => $review ? (int)$review->rating : null,
                 'total_amount' => (float)$order->total_amount,
-                'delivery_fee' => (float)$order->delivery_fee,
-                'subtotal' => round((float)$order->total_amount - (float)$order->delivery_fee, 2),
+                'delivery_fee' => $pricing['estimated_delivery_fee'],
+                'subtotal' => $pricing['medicine_subtotal'],
+                'medicine_subtotal' => $pricing['medicine_subtotal'],
+                'estimated_delivery_fee' => $pricing['estimated_delivery_fee'],
+                'actual_courier_fee' => $pricing['actual_courier_fee'],
+                'has_actual_courier_fee' => $pricing['has_actual_courier_fee'],
+                'courier_fee_status' => $pricing['courier_fee_status'],
+                'effective_delivery_fee' => $pricing['effective_delivery_fee'],
+                'estimated_total' => $pricing['estimated_total'],
+                'customer_payable_amount' => $pricing['customer_payable_amount'],
+                'delivery_fee_variance' => $pricing['delivery_fee_variance'],
+                'courier_fee_notice' => $pricing['courier_fee_notice'],
                 'delivery_address' => $order->delivery_address,
                 'latitude' => (float)($order->latitude ?? 10.6385),
                 'longitude' => (float)($order->longitude ?? 122.9520),

@@ -129,9 +129,9 @@
                         @endforeach
                     </div>
 
-                    <div class="border-t border-slate-100 pt-4 space-y-2 mb-6">
+                    <div class="border-t border-slate-100 pt-4 space-y-2 mb-5">
                         <div class="flex justify-between text-sm">
-                            <span class="text-slate-500 font-medium">Subtotal</span>
+                            <span class="text-slate-500 font-medium">Medicine Subtotal</span>
                             <span class="font-bold text-slate-800">₱{{ number_format($subtotal, 2) }}</span>
                         </div>
                         <div class="flex justify-between text-sm">
@@ -140,9 +140,14 @@
                         </div>
                     </div>
 
-                    <div class="border-t border-slate-200 pt-4 flex justify-between items-end mb-6">
-                        <span class="font-bold text-slate-600">Total</span>
+                    <div class="border-t border-slate-200 pt-4 flex justify-between items-end mb-4">
+                        <span class="font-bold text-slate-600 text-sm">Customer Payable (COD)</span>
                         <span class="text-3xl font-black text-slate-900">₱{{ number_format($total, 2) }}</span>
+                    </div>
+
+                    <div class="mb-5 p-3 rounded-xl bg-amber-50/80 border border-amber-200/80 text-[11px] text-amber-900 leading-relaxed font-medium">
+                        <i class="fas fa-info-circle text-amber-600 mr-1"></i>
+                        Standard Barangay Alijis delivery fee applied. Your confirmed COD payable (<strong>Medicine Subtotal + Delivery Fee</strong>) remains fixed once the order is placed (no minimum order).
                     </div>
 
                     <button type="submit" form="checkoutForm" class="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl shadow-lg shadow-emerald-200 transition hover:-translate-y-0.5 text-lg flex items-center justify-center gap-2">

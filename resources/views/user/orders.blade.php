@@ -50,7 +50,7 @@
                         'cancelled' => ['Cancelled', 'bg-slate-50 text-slate-700 border-slate-200', 'fas fa-ban'],
                         'rejected' => ['Rejected', 'bg-rose-50 text-rose-700 border-rose-200', 'fas fa-times-circle'],
                     ];
-                    $cfg = $statusConfig[$order->status] ?? ['Unknown', 'bg-slate-50 text-slate-700 border-slate-200', 'fas fa-question'];
+                    $cfg = $statusConfig[$order->status] ?? ['Unknown', 'bg-slate-50 text-slate-700 border-slate-200', 'fas fa-question']; $pricing = $order->pricingSummary();
                 @endphp
                 <a href="{{ route('orders.show', $order->id) }}" class="block bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all overflow-hidden">
                     <div class="p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -60,14 +60,14 @@
                             </div>
                             <div>
                                 <h3 class="font-black text-slate-800">{{ $order->pharmacy->name }}</h3>
-                                <p class="text-xs text-slate-500 font-medium mt-0.5">{{ $order->items->count() }} item(s) · {{ $order->created_at->format('M d, Y h:i A') }}</p>
+                                <p class="text-xs text-slate-500 font-medium mt-0.5">{{ $order->items->count() }} item(s) · {{ $order->created_at->format('M d, Y h:i A') }}</p><p class="text-xs text-slate-500 font-medium mt-1">Med ₱{{ number_format($pricing['medicine_subtotal'], 2) }} · Delivery ₱{{ number_format($pricing['estimated_delivery_fee'], 2) }}</p>
                             </div>
                         </div>
                         <div class="flex items-center gap-4">
                             <span class="px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border {{ $cfg[1] }} flex items-center gap-1.5">
                                 <i class="{{ $cfg[2] }}"></i> {{ $cfg[0] }}
                             </span>
-                            <span class="font-black text-lg text-slate-800">₱{{ number_format($order->total_amount, 2) }}</span>
+                            <div class="text-right"><span class="font-black text-lg text-slate-800 block leading-tight">₱{{ number_format($pricing['customer_payable_amount'], 2) }}</span><span class="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Customer Payable (COD)</span></div>
                             <i class="fas fa-chevron-right text-slate-300"></i>
                         </div>
                     </div>

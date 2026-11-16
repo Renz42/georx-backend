@@ -39,6 +39,7 @@ class AdminController extends Controller
             \Illuminate\Support\Facades\Cache::forget('admin_dashboard_data');
             \Illuminate\Support\Facades\Cache::forget('admin_dashboard_data_v2');
             \Illuminate\Support\Facades\Cache::forget('admin_dashboard_data_v3');
+            \Illuminate\Support\Facades\Cache::forget('admin_dashboard_data_v4');
         } catch (\Throwable) {
         }
     }
@@ -211,6 +212,12 @@ class AdminController extends Controller
             $completedOrderValue = round((float) \App\Models\Order::where('status', 'delivered')->sum('total_amount'), 2);
             $estimatedDeliveryFees = round((float) \App\Models\Order::where('status', 'delivered')
                 ->sum(\Illuminate\Support\Facades\DB::raw('COALESCE(delivery_fee, 0)')), 2);
+            $recordedActualCourierFees = round((float) \App\Models\Order::where('status', 'delivered')
+                ->whereNotNull('actual_courier_fee')
+                ->sum('actual_courier_fee'), 2);
+            $recordedActualCourierCount = \App\Models\Order::where('status', 'delivered')
+                ->whereNotNull('actual_courier_fee')
+                ->count();
             $medicineSalesGmv = round(max(0, $completedOrderValue - $estimatedDeliveryFees), 2);
             $platformRevenue = $completedOrderValue;
 
@@ -296,6 +303,8 @@ class AdminController extends Controller
                 'completedOrderValue',
                 'medicineSalesGmv',
                 'estimatedDeliveryFees',
+                'recordedActualCourierFees',
+                'recordedActualCourierCount',
                 'roleCounts',
                 'monthlyGrowth',
                 'mostSearched',
@@ -306,13 +315,13 @@ class AdminController extends Controller
         };
 
         try {
-            $cachedDashboard = \Illuminate\Support\Facades\Cache::remember('admin_dashboard_data_v3', 60, $computeDashboardMetrics);
+            $cachedDashboard = \Illuminate\Support\Facades\Cache::remember('admin_dashboard_data_v4', 60, $computeDashboardMetrics);
         } catch (\Throwable) {
             $cachedDashboard = $computeDashboardMetrics();
         }
 
         // Recent orders live (not cached for freshness)
-        $recentOrders = \App\Models\Order::with('user:id,name', 'pharmacy:id,name')
+        $recentOrders = \App\Models\Order::with('user:id,name', 'pharmacy:id,name', 'items')
             ->latest()
             ->take(8)
             ->get();
@@ -338,6 +347,12 @@ class AdminController extends Controller
         $completedOrderValue = round((float) \App\Models\Order::where('status', 'delivered')->sum('total_amount'), 2);
         $estimatedDeliveryFees = round((float) \App\Models\Order::where('status', 'delivered')
             ->sum(\Illuminate\Support\Facades\DB::raw('COALESCE(delivery_fee, 0)')), 2);
+        $recordedActualCourierFees = round((float) \App\Models\Order::where('status', 'delivered')
+            ->whereNotNull('actual_courier_fee')
+            ->sum('actual_courier_fee'), 2);
+        $recordedActualCourierCount = \App\Models\Order::where('status', 'delivered')
+            ->whereNotNull('actual_courier_fee')
+            ->count();
         $medicineSalesGmv = round(max(0, $completedOrderValue - $estimatedDeliveryFees), 2);
 
         // Most Ordered Medicines (top 15 — delivered orders only)
@@ -411,6 +426,8 @@ class AdminController extends Controller
             'completedOrderValue',
             'medicineSalesGmv',
             'estimatedDeliveryFees',
+            'recordedActualCourierFees',
+            'recordedActualCourierCount',
             'mostOrdered',
             'mostSearched',
             'lowStockCount',

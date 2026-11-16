@@ -85,6 +85,11 @@ class DeliveryController extends Controller
 
         if ($request->status === 'delivered') {
             try {
+                \Illuminate\Support\Facades\Cache::forget('admin_dashboard_data_v3');
+                \Illuminate\Support\Facades\Cache::forget('admin_dashboard_data_v4');
+            } catch (\Throwable) {
+            }
+            try {
                 $order->user?->notify(new \App\Notifications\ReviewPrompt($order));
             } catch (\Throwable $e) {}
         }
@@ -239,6 +244,12 @@ class DeliveryController extends Controller
                         'delivery_status' => 'delivered',
                         'delivered_at' => $order->delivered_at ?? now(),
                     ]);
+
+                    try {
+                        \Illuminate\Support\Facades\Cache::forget('admin_dashboard_data_v3');
+                        \Illuminate\Support\Facades\Cache::forget('admin_dashboard_data_v4');
+                    } catch (\Throwable) {
+                    }
 
                     try {
                         $order->user?->notify(new \App\Notifications\OrderDelivered($order));

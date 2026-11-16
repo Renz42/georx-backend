@@ -128,4 +128,15 @@ class Order extends Model
     {
         return $this->hasOne(Conversation::class);
     }
+
+    /**
+     * Authoritative pricing breakdown separating medicine subtotal, estimated fee,
+     * optional recorded actual courier fee, and customer COD payable amount.
+     *
+     * @return array<string, mixed>
+     */
+    public function pricingSummary(): array
+    {
+        return \App\Services\DeliveryService::getOrderPricingSummary($this);
+    }
 }

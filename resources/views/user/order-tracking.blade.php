@@ -265,9 +265,25 @@
                             </div>
                         @endforeach
                     </div>
-                    <div class="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex justify-between items-center text-xs">
-                        <span class="font-bold text-slate-600">Total Amount (Incl. Delivery):</span>
-                        <span class="font-black text-sm text-slate-900">₱{{ number_format($order->total_amount, 2) }}</span>
+                    @php $pricing = $pricing ?? $order->pricingSummary(); @endphp
+                    <div class="px-6 py-4 bg-slate-50 border-t border-slate-200 space-y-2 text-xs">
+                        <div class="flex justify-between items-center text-slate-600">
+                            <span class="font-medium">Medicine Subtotal:</span>
+                            <span class="font-bold text-slate-900">₱{{ number_format($pricing['medicine_subtotal'], 2) }}</span>
+                        </div>
+                        <div class="flex justify-between items-center text-slate-600">
+                            <span class="font-medium">Delivery Fee:</span>
+                            <span class="font-bold text-slate-900">₱{{ number_format($pricing['estimated_delivery_fee'], 2) }}</span>
+                        </div>
+                        <div class="pt-2 border-t border-slate-200 flex justify-between items-center">
+                            <span class="font-bold text-slate-700">
+                                Customer Payable Amount (COD):
+                            </span>
+                            <span class="font-black text-sm text-teal-700">₱{{ number_format($pricing['customer_payable_amount'], 2) }}</span>
+                        </div>
+                        <p class="text-[11px] text-slate-500 pt-1 leading-relaxed">
+                            Confirmed Cash on Delivery (COD) total: Medicine Subtotal + Delivery Fee. Any external courier fare variance is handled internally and does not change your order total.
+                        </p>
                     </div>
                 </div>
 

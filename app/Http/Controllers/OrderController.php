@@ -39,6 +39,7 @@ class OrderController extends Controller
                 ->where('medicine_id', $item->medicine_id)
                 ->first();
             $price = $pivot ? (float)$pivot->selling_price : 0.00;
+            $item->price = $price;
             $subtotal += ($price * $item->quantity);
         }
 
@@ -46,9 +47,52 @@ class OrderController extends Controller
             $pharmacy->latitude,
             $pharmacy->longitude
         );
-        $total = $subtotal + $deliveryFee;
+        $total = round($subtotal + $deliveryFee, 2);
 
         return view('user.checkout', compact('cartItems', 'pharmacy', 'subtotal', 'deliveryFee', 'total'));
+    }
+
+    /**
+     * Public read-only endpoint returning the authoritative platform delivery fee estimate
+     * for Barangay Alijis checkout previews without inventing distance tariffs.
+     */
+    public function deliveryEstimate(Request $request)
+    {
+        $settings = \App\Models\GlobalSetting::getSettings();
+        $pharmacy = null;
+
+        if ($request->filled('pharmacy_id') && is_numeric($request->input('pharmacy_id'))) {
+            $pharmacy = Pharmacy::find((int) $request->input('pharmacy_id'));
+        }
+
+        $pickupLat = isset($pharmacy->latitude) ? (float) $pharmacy->latitude : null;
+        $pickupLng = isset($pharmacy->longitude) ? (float) $pharmacy->longitude : null;
+        $dropoffLat = $request->filled('latitude') && is_numeric($request->input('latitude'))
+            ? (float) $request->input('latitude')
+            : null;
+        $dropoffLng = $request->filled('longitude') && is_numeric($request->input('longitude'))
+            ? (float) $request->input('longitude')
+            : null;
+
+        $estimatedFee = \App\Services\DeliveryService::calculateEstimatedDeliveryFee(
+            $pickupLat,
+            $pickupLng,
+            $dropoffLat,
+            $dropoffLng
+        );
+
+        return response()->json([
+            'status' => 'success',
+            'estimated_delivery_fee' => $estimatedFee,
+            'base_delivery_fee' => round((float) ($settings->delivery_base_fee ?? $settings->base_delivery_fee ?? 50.0), 2),
+            'delivery_minimum_fee' => round((float) ($settings->delivery_minimum_fee ?? 50.0), 2),
+            'delivery_maximum_estimate' => round((float) ($settings->delivery_maximum_estimate ?? 150.0), 2),
+            'delivery_per_km_fee' => round((float) ($settings->delivery_per_km_fee ?? 0.0), 2),
+            'delivery_estimate_enabled' => (bool) ($settings->delivery_estimate_enabled ?? true),
+            'is_estimate' => true,
+            'currency' => 'PHP',
+            'notice' => 'Standard Barangay Alijis delivery fee (COD). Once placed, your confirmed order total remains fixed.',
+        ]);
     }
 
     public function placeOrder(Request $request)
@@ -309,10 +353,12 @@ class OrderController extends Controller
         }
 
         if ($isApi) {
+            $order->load('items.medicine', 'pharmacy');
             return response()->json([
                 'status' => 'success',
                 'message' => 'Order placed successfully! Waiting for pharmacy confirmation.',
-                'order' => $order->load('items', 'pharmacy'),
+                'order' => $order,
+                'pricing' => $order->pricingSummary(),
             ], 201);
         }
 
@@ -347,7 +393,8 @@ class OrderController extends Controller
     public function show($id)
     {
         $order = Order::where('id', $id)->where('user_id', Auth::id())->with('items.medicine', 'pharmacy', 'deliveryPartner', 'review')->firstOrFail();
-        return view('user.order-tracking', compact('order'));
+        $pricing = $order->pricingSummary();
+        return view('user.order-tracking', compact('order', 'pricing'));
     }
 
     public function submitReview(Request $request, $id)
@@ -432,6 +479,7 @@ class OrderController extends Controller
 
         $data = [
             'order' => $order,
+            'pricing' => $order->pricingSummary(),
             'date' => now()->format('F d, Y h:i A')
         ];
 

@@ -21,6 +21,15 @@ class PortalController extends Controller
         return $user?->pharmacy;
     }
 
+    private function clearAdminDashboardCache(): void
+    {
+        try {
+            \Illuminate\Support\Facades\Cache::forget('admin_dashboard_data_v3');
+            \Illuminate\Support\Facades\Cache::forget('admin_dashboard_data_v4');
+        } catch (\Throwable) {
+        }
+    }
+
     // Dashboard
     public function dashboard()
     {
@@ -1362,8 +1371,16 @@ class PortalController extends Controller
             return back()->with('error', "Order #{$order->id} must be confirmed by the pharmacy before booking delivery.");
         }
 
-        if (in_array($order->status, [\App\Models\Order::STATUS_CANCELLED, \App\Models\Order::STATUS_REJECTED], true)) {
-            return back()->with('error', "Cannot book delivery for a cancelled or rejected order.");
+        if (in_array($order->status, [\App\Models\Order::STATUS_CANCELLED, \App\Models\Order::STATUS_REJECTED, \App\Models\Order::STATUS_DELIVERED], true)) {
+            return back()->with('error', "Cannot book delivery for a delivered, cancelled, or rejected order.");
+        }
+
+        // Preserve existing provider, booking ID, tracking URL, and delivery state once booked
+        if (!empty($order->delivery_provider) && !empty($order->delivery_booking_id)) {
+            $existingProvider = $order->delivery_provider === 'grab' ? 'Grab Express' : 'Maxim Delivery';
+            return back()->withErrors([
+                'delivery_booking_id' => "Order #{$order->id} already has a confirmed {$existingProvider} booking ({$order->delivery_booking_id}). Existing booking details cannot be overwritten.",
+            ])->withInput();
         }
 
         $validated = $request->validate([
@@ -1376,11 +1393,26 @@ class PortalController extends Controller
             'driver_vehicle'       => 'nullable|string|max:100',
         ]);
 
+        $bookingCheck = \App\Services\DeliveryService::validateCourierBooking(
+            $validated['delivery_provider'],
+            $validated['delivery_booking_id'],
+            $validated['delivery_tracking_url'] ?? null,
+            true
+        );
+
+        if (!$bookingCheck['valid']) {
+            return back()->withErrors($bookingCheck['errors'])->withInput();
+        }
+
+        $actualCourierFee = $request->filled('actual_courier_fee')
+            ? round((float) $validated['actual_courier_fee'], 2)
+            : null;
+
         $order->update([
             'delivery_provider'     => $validated['delivery_provider'],
-            'delivery_booking_id'   => $validated['delivery_booking_id'],
+            'delivery_booking_id'   => $bookingCheck['normalized_booking_id'],
             'delivery_tracking_url' => $validated['delivery_tracking_url'] ?? null,
-            'actual_courier_fee'    => isset($validated['actual_courier_fee']) ? (float)$validated['actual_courier_fee'] : null,
+            'actual_courier_fee'    => $actualCourierFee,
             'delivery_status'       => 'booked',
             'delivery_booked_at'    => now(),
             'driver_name'           => $validated['driver_name'] ?? null,
@@ -1390,16 +1422,51 @@ class PortalController extends Controller
             'accepted_at'           => now(),
         ]);
 
+        $this->clearAdminDashboardCache();
+
         $providerLabel = $validated['delivery_provider'] === 'grab' ? 'Grab Express' : 'Maxim';
 
         // Notify patient
         $order->user->notify(new \App\Notifications\OrderStatusChanged(
             $order,
-            "Your order has been booked with {$providerLabel}! Booking Ref: {$validated['delivery_booking_id']}",
+            "Your order has been booked with {$providerLabel}! Booking Ref: {$bookingCheck['normalized_booking_id']}",
             'fas fa-shipping-fast text-emerald-500'
         ));
 
-        return back()->with('success', "Order #{$order->id} successfully booked via {$providerLabel}! Booking Reference: {$validated['delivery_booking_id']}");
+        return back()->with('success', "Order #{$order->id} successfully booked via {$providerLabel}! Booking Reference: {$bookingCheck['normalized_booking_id']}");
+    }
+
+    /**
+     * Record or update only the actual external courier fare without changing provider or booking reference.
+     */
+    public function updateCourierFee(Request $request, $id)
+    {
+        $pharmacy = $this->getMyPharmacy();
+        $order = \App\Models\Order::where('id', $id)
+            ->where('pharmacy_id', $pharmacy->id)
+            ->firstOrFail();
+
+        if (!$order->pharmacy_confirmed) {
+            return back()->with('error', "Order #{$order->id} must be confirmed before recording the courier fare.");
+        }
+
+        if (in_array($order->status, [\App\Models\Order::STATUS_CANCELLED, \App\Models\Order::STATUS_REJECTED], true)) {
+            return back()->with('error', "Cannot update courier fare for a cancelled or rejected order.");
+        }
+
+        if (empty($order->delivery_provider) || empty($order->delivery_booking_id)) {
+            return back()->with('error', "Record a courier booking before entering the actual courier fare.");
+        }
+
+        $validated = $request->validate([
+            'actual_courier_fee' => 'required|numeric|min:0|max:10000',
+        ]);
+
+        $actualFee = round((float) $validated['actual_courier_fee'], 2);
+        $order->update(['actual_courier_fee' => $actualFee]);
+        $this->clearAdminDashboardCache();
+
+        return back()->with('success', "Actual courier fare updated to ₱" . number_format($actualFee, 2) . " for Order #{$order->id}.");
     }
 
     /**
@@ -1429,7 +1496,8 @@ class PortalController extends Controller
         }
 
         $validated = $request->validate([
-            'status' => 'required|in:in_transit,delivered'
+            'status' => 'required|in:in_transit,delivered',
+            'actual_courier_fee' => 'nullable|numeric|min:0|max:10000',
         ]);
 
         $providerLabel = $order->delivery_provider === 'grab' ? 'Grab Express' : ($order->delivery_provider === 'maxim' ? 'Maxim' : 'Courier');
@@ -1443,11 +1511,17 @@ class PortalController extends Controller
                 return back()->with('info', "Order #{$order->id} is already in transit.");
             }
 
-            $order->update([
+            $updateData = [
                 'delivery_status' => 'in_transit',
                 'status'          => \App\Models\Order::STATUS_PICKED_UP,
                 'picked_up_at'    => $order->picked_up_at ?? now(),
-            ]);
+            ];
+            if ($request->filled('actual_courier_fee')) {
+                $updateData['actual_courier_fee'] = round((float) $validated['actual_courier_fee'], 2);
+            }
+
+            $order->update($updateData);
+            $this->clearAdminDashboardCache();
 
             try {
                 $order->user?->notify(new \App\Notifications\OrderStatusChanged(
@@ -1474,11 +1548,17 @@ class PortalController extends Controller
                 return back()->with('info', "Order #{$order->id} is already marked as delivered.");
             }
 
-            $order->update([
+            $deliveredUpdate = [
                 'delivery_status' => 'delivered',
                 'status'          => \App\Models\Order::STATUS_DELIVERED,
                 'delivered_at'    => $order->delivered_at ?? now(),
-            ]);
+            ];
+            if ($request->filled('actual_courier_fee')) {
+                $deliveredUpdate['actual_courier_fee'] = round((float) $validated['actual_courier_fee'], 2);
+            }
+
+            $order->update($deliveredUpdate);
+            $this->clearAdminDashboardCache();
 
             try {
                 $order->user?->notify(new \App\Notifications\OrderStatusChanged(

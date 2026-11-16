@@ -39,14 +39,20 @@
             <p class="text-[11px] text-[#64748B] mt-0.5">Delivered merchandise</p>
         </div>
         <div class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs">
-            <p class="text-[10px] font-black text-[#64748B] uppercase tracking-widest">Est. Courier Fees</p>
+            <p class="text-[10px] font-black text-[#64748B] uppercase tracking-widest">Order Delivery Fees</p>
             <p class="text-2xl font-black text-[#0F172A] mt-1">₱{{ number_format($estimatedDeliveryFees ?? 0, 2) }}</p>
-            <p class="text-[11px] text-[#64748B] mt-0.5">External courier dispatch</p>
+            <p class="text-[11px] text-[#64748B] mt-0.5">
+                @if(($recordedActualCourierCount ?? 0) > 0)
+                    Internal courier expense ({{ $recordedActualCourierCount }}): ₱{{ number_format($recordedActualCourierFees ?? 0, 2) }}
+                @else
+                    Charged delivery fees (courier expense pending)
+                @endif
+            </p>
         </div>
         <div class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs">
             <p class="text-[10px] font-black text-[#64748B] uppercase tracking-widest">Total Order Value</p>
             <p class="text-2xl font-black text-[#0F172A] mt-1">₱{{ number_format($completedOrderValue ?? 0, 2) }}</p>
-            <p class="text-[11px] text-[#64748B] mt-0.5">GMV + Courier Fees</p>
+            <p class="text-[11px] text-[#64748B] mt-0.5">GMV + Order Delivery Fees</p>
         </div>
     </div>
 

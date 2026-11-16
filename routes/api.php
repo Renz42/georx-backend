@@ -41,6 +41,9 @@ Route::prefix('pharmacies')->group(function () {
     Route::get('/{pharmacy}/reviews', [\App\Http\Controllers\OrderController::class, 'getPharmacyReviews']);
 });
 
+// Public Delivery Fee Estimate Route (Read-only Alijis platform estimate)
+Route::get('/delivery/estimate', [\App\Http\Controllers\OrderController::class, 'deliveryEstimate']);
+
 // Public Geofence Validation Route
 Route::post('/geofence/validate', function (Request $request) {
     $request->validate([

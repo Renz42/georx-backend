@@ -37,6 +37,53 @@
     </div>
 </div>
 
+@if($errors->any())
+    <div class="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-800 shadow-2xs">
+        <div class="font-bold flex items-center gap-2 mb-1">
+            <i class="fas fa-exclamation-triangle text-rose-600"></i>
+            <span>Unable to process order update</span>
+        </div>
+        <ul class="list-disc list-inside space-y-0.5 font-medium">
+            @foreach($errors->all() as $error)
+                <li>{{ $error }}</li>
+            @endforeach
+        </ul>
+    </div>
+@endif
+
+@once
+<script>
+window.checkCourierProviderMismatch = function(el) {
+    const form = el ? el.closest('form') : null;
+    if (!form) return;
+    const providerSelect = form.querySelector('select[name="delivery_provider"]');
+    const refInput = form.querySelector('input[name="delivery_booking_id"]');
+    const urlInput = form.querySelector('input[name="delivery_tracking_url"]');
+    const hint = form.querySelector('[data-provider-hint]');
+    if (!providerSelect || !refInput || !hint) return;
+
+    const provider = (providerSelect.value || '').toLowerCase();
+    const ref = (refInput.value || '').trim().toLowerCase();
+    const url = (urlInput ? urlInput.value : '').trim().toLowerCase();
+
+    let warning = '';
+    if (provider === 'grab' && (ref.includes('maxim') || url.includes('taximaxim') || url.includes('maxim'))) {
+        warning = 'Selected provider is Grab Express, but booking reference/URL appears to belong to Maxim.';
+    } else if (provider === 'maxim' && (ref.includes('grab') || url.includes('grab.com'))) {
+        warning = 'Selected provider is Maxim Delivery, but booking reference/URL appears to belong to Grab Express.';
+    }
+
+    if (warning) {
+        hint.textContent = warning;
+        hint.classList.remove('hidden');
+    } else {
+        hint.textContent = '';
+        hint.classList.add('hidden');
+    }
+};
+</script>
+@endonce
+
 <!-- Status Filters (Image 2: Deep Pine Active Filter #0D7A5F with Translucent Counter) -->
 <div class="flex gap-2.5 overflow-x-auto custom-scrollbar pb-2 mb-6">
     @php
@@ -97,6 +144,10 @@
                 ];
                 $cfg = $statusConfig[$order->status] ?? ['PROCESSING', 'bg-slate-50 text-slate-700 border-slate-200', 'fas fa-clock'];
                 $pharmacyObj = $order->pharmacy ?? $pharmacy;
+                $pricing = $order->pricingSummary();
+                $isSubmittedBookingOrder = (string) old('_booking_order_id') === (string) $order->id;
+                $isSubmittedFeeOrder = (string) old('_fee_order_id') === (string) $order->id;
+                $hasOrderValidationBounce = $errors->any() && ($isSubmittedBookingOrder || $isSubmittedFeeOrder);
 
                 // Build searchable text index for instant client-side search
                 $searchTerms = [
@@ -127,7 +178,7 @@
                      onclick="toggleOrderDetails('order-details-{{ $order->id }}', this)" 
                      onkeydown="if(event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleOrderDetails('order-details-{{ $order->id }}', this); }"
                      class="order-summary-trigger p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer select-none hover:bg-slate-50/80 transition-colors"
-                     aria-expanded="false" 
+                     aria-expanded="{{ $hasOrderValidationBounce ? 'true' : 'false' }}"
                      aria-controls="order-details-{{ $order->id }}"
                      title="Click to view full order details">
                     
@@ -157,9 +208,14 @@
                     <!-- Right: Total, Status Badge, Expand Indicator -->
                     <div class="flex items-center justify-between sm:justify-end gap-3.5 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                         <div class="text-left sm:text-right">
-                            <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">TOTAL</span>
+                            <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">
+                                CUSTOMER PAYABLE (COD)
+                            </span>
                             <span class="text-sm sm:text-base font-black text-slate-900 leading-none block mt-0.5">
-                                ₱{{ number_format($order->total_amount, 2) }}
+                                ₱{{ number_format($pricing['customer_payable_amount'], 2) }}
+                            </span>
+                            <span class="text-[9px] font-bold {{ $pricing['has_actual_courier_fee'] ? 'text-slate-600' : 'text-amber-600' }} block mt-0.5">
+                                {{ $pricing['has_actual_courier_fee'] ? 'Courier Exp. (Info): ₱' . number_format($pricing['actual_courier_fee'], 2) : 'Courier Exp. (Info): Pending' }}
                             </span>
                         </div>
 
@@ -176,7 +232,7 @@
                 </div>
 
                 <!-- FULL ORDER DETAILS (Expandable Panel) -->
-                <div id="order-details-{{ $order->id }}" class="order-details-panel hidden border-t border-slate-100 p-5 sm:p-6 bg-slate-50/30 space-y-5">
+                <div id="order-details-{{ $order->id }}" class="order-details-panel {{ $hasOrderValidationBounce ? '' : 'hidden' }} border-t border-slate-100 p-5 sm:p-6 bg-slate-50/30 space-y-5">
 
                     <!-- Customer & Drop-off Details -->
                     <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4 pb-4 border-b border-slate-100">
@@ -200,11 +256,18 @@
                             </div>
                         </div>
 
-                        <!-- Dedicated Estimated Delivery Fee Box -->
+                        <!-- Dedicated Order Delivery Fee Box -->
                         <div class="border border-slate-200/90 rounded-xl px-4 py-2.5 text-left sm:text-right bg-white shrink-0 shadow-2xs">
-                            <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">ESTIMATED DELIVERY FEE</span>
+                            <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">DELIVERY FEE (COD)</span>
                             <span class="text-lg font-black text-slate-900 mt-0.5 block leading-none">
-                                ₱{{ number_format($order->delivery_fee, 2) }}
+                                ₱{{ number_format($pricing['estimated_delivery_fee'], 2) }}
+                            </span>
+                            <span class="text-[10px] font-semibold text-slate-500 mt-1 block">
+                                @if($pricing['has_actual_courier_fee'])
+                                    Internal Courier Exp.: <strong class="text-slate-900">₱{{ number_format($pricing['actual_courier_fee'], 2) }}</strong>
+                                @else
+                                    Internal Courier Exp.: <span class="text-amber-600 font-bold">Pending / Not yet recorded</span>
+                                @endif
                             </span>
                         </div>
                     </div>
@@ -257,13 +320,44 @@
                                 @endif
                             </div>
 
-                            <!-- Financial Distinction: Courier Fare Paid vs Estimate -->
-                            @if($order->actual_courier_fee)
-                                <div class="pt-2 border-t border-slate-200/60 flex items-center justify-between text-xs text-slate-600">
-                                    <span class="font-medium">Actual Courier Fare Paid:</span>
-                                    <strong class="text-slate-900 font-black">₱{{ number_format($order->actual_courier_fee, 2) }}</strong>
+                            <!-- Financial Distinction: Charged Delivery Fee (COD) vs Internal Courier Expense -->
+                            <div class="pt-2 border-t border-slate-200/60 space-y-2 text-xs text-slate-600">
+                                <div class="flex items-center justify-between">
+                                    <span class="font-medium">Charged Delivery Fee (COD):</span>
+                                    <strong class="text-slate-900 font-bold">₱{{ number_format($pricing['estimated_delivery_fee'], 2) }}</strong>
                                 </div>
-                            @endif
+                                <div class="flex items-center justify-between">
+                                    <span class="font-medium">Actual Courier Expense (Info):</span>
+                                    @if($pricing['has_actual_courier_fee'])
+                                        <strong class="text-slate-900 font-black">₱{{ number_format($pricing['actual_courier_fee'], 2) }}</strong>
+                                    @else
+                                        <span class="text-amber-600 font-bold">Pending / Not yet recorded</span>
+                                    @endif
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <span class="font-medium">Customer Payable (COD):</span>
+                                    <strong class="text-slate-900 font-black">₱{{ number_format($pricing['customer_payable_amount'], 2) }}</strong>
+                                </div>
+
+                                @if(($order->delivery_type ?? 'delivery') !== 'pickup' && !empty($order->delivery_provider) && !empty($order->delivery_booking_id) && !in_array($order->status, ['cancelled', 'rejected'], true))
+                                    <form action="{{ route('pharmacy.orders.courier-fee', $order->id) }}" method="POST" class="pt-2 border-t border-slate-200/60 flex flex-wrap items-center gap-2">
+                                        @csrf
+                                        <input type="hidden" name="_fee_order_id" value="{{ $order->id }}">
+                                        <label for="actual_courier_fee_{{ $order->id }}" class="text-[10px] font-black text-slate-500 uppercase tracking-wider">
+                                            Record / Update Actual Courier Fare (₱)
+                                        </label>
+                                        <input id="actual_courier_fee_{{ $order->id }}" type="number" step="0.01" min="0" max="10000"
+                                               name="actual_courier_fee"
+                                               value="{{ $isSubmittedFeeOrder ? old('actual_courier_fee') : ($pricing['has_actual_courier_fee'] ? number_format($pricing['actual_courier_fee'], 2, '.', '') : '') }}"
+                                               placeholder="e.g. 58.00"
+                                               required
+                                               class="w-28 bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0D7A5F]/20 focus:border-[#0D7A5F]">
+                                        <button type="submit" class="px-3 py-1 rounded-lg bg-[#0D7A5F] text-white text-[11px] font-bold hover:bg-[#0B664F] transition">
+                                            {{ $pricing['has_actual_courier_fee'] ? 'Update Fare' : 'Save Actual Fare' }}
+                                        </button>
+                                    </form>
+                                @endif
+                            </div>
 
                             <!-- Rider Information if recorded -->
                             @if($order->driver_name || $order->driver_phone)
@@ -343,30 +437,45 @@
                             <!-- Dispatch Booking Form -->
                             <form action="{{ route('pharmacy.orders.book-delivery', $order->id) }}" method="POST" class="pt-2 border-t border-slate-200/80 space-y-3">
                                 @csrf
+                                <input type="hidden" name="_booking_order_id" value="{{ $order->id }}">
+                                @php
+                                    $selectedBookingProvider = $isSubmittedBookingOrder
+                                        ? old('delivery_provider', $order->delivery_provider)
+                                        : $order->delivery_provider;
+                                @endphp
                                 <div class="grid grid-cols-2 gap-3">
                                     <div>
                                         <label class="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Provider *</label>
-                                        <select name="delivery_provider" required class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0D7A5F]/20 focus:border-[#0D7A5F]">
-                                            <option value="grab">Grab Express</option>
-                                            <option value="maxim">Maxim Delivery</option>
+                                        <select name="delivery_provider" required onchange="window.checkCourierProviderMismatch(this)" class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0D7A5F]/20 focus:border-[#0D7A5F]">
+                                            <option value="grab" {{ $selectedBookingProvider === 'grab' ? 'selected' : '' }}>Grab Express</option>
+                                            <option value="maxim" {{ $selectedBookingProvider === 'maxim' ? 'selected' : '' }}>Maxim Delivery</option>
                                         </select>
                                     </div>
                                     <div>
                                         <label class="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Booking Reference ID *</label>
-                                        <input type="text" name="delivery_booking_id" required placeholder="e.g. GRAB-94821 or MAXIM-1024"
+                                        <input type="text" name="delivery_booking_id" required
+                                               value="{{ $isSubmittedBookingOrder ? old('delivery_booking_id') : '' }}"
+                                               oninput="window.checkCourierProviderMismatch(this)"
+                                               placeholder="e.g. GRAB-94821 or MAXIM-1024"
                                                class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0D7A5F]/20 focus:border-[#0D7A5F]">
                                     </div>
                                 </div>
+                                <p data-provider-hint class="hidden rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] font-semibold text-amber-800"></p>
 
                                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                     <div class="sm:col-span-2">
                                         <label class="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Live Tracking URL (Optional)</label>
-                                        <input type="url" name="delivery_tracking_url" placeholder="https://express.grab.com/track/..."
+                                        <input type="url" name="delivery_tracking_url"
+                                               value="{{ $isSubmittedBookingOrder ? old('delivery_tracking_url') : '' }}"
+                                               oninput="window.checkCourierProviderMismatch(this)"
+                                               placeholder="https://express.grab.com/track/..."
                                                class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0D7A5F]/20 focus:border-[#0D7A5F]">
                                     </div>
                                     <div>
                                         <label class="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Actual Courier Fare ₱ (Optional)</label>
-                                        <input type="number" step="0.01" min="0" name="actual_courier_fee" placeholder="e.g. 52.00"
+                                        <input type="number" step="0.01" min="0" max="10000" name="actual_courier_fee"
+                                               value="{{ $isSubmittedBookingOrder ? old('actual_courier_fee') : '' }}"
+                                               placeholder="e.g. 52.00"
                                                class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0D7A5F]/20 focus:border-[#0D7A5F]">
                                     </div>
                                 </div>
@@ -374,12 +483,16 @@
                                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <div>
                                         <label class="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Rider Phone (Optional)</label>
-                                        <input type="text" name="driver_phone" placeholder="e.g. 0917 123 4567"
+                                        <input type="text" name="driver_phone"
+                                               value="{{ $isSubmittedBookingOrder ? old('driver_phone') : '' }}"
+                                               placeholder="e.g. 0917 123 4567"
                                                class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0D7A5F]/20 focus:border-[#0D7A5F]">
                                     </div>
                                     <div>
                                         <label class="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Rider Name (Optional)</label>
-                                        <input type="text" name="driver_name" placeholder="e.g. Juan Rider"
+                                        <input type="text" name="driver_name"
+                                               value="{{ $isSubmittedBookingOrder ? old('driver_name') : '' }}"
+                                               placeholder="e.g. Juan Rider"
                                                class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0D7A5F]/20 focus:border-[#0D7A5F]">
                                     </div>
                                 </div>
@@ -500,12 +613,20 @@
 
                     <!-- Financial Summary & Workflow Controls -->
                     <div class="pt-4 border-t border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                        <div class="flex items-center gap-2 text-xs font-semibold text-slate-600">
-                            <span>Subtotal: <strong class="text-slate-900">₱{{ number_format($order->total_amount - $order->delivery_fee, 2) }}</strong></span>
+                        <div class="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-600">
+                            <span>Medicine Subtotal: <strong class="text-slate-900">₱{{ number_format($pricing['medicine_subtotal'], 2) }}</strong></span>
                             <span class="text-slate-300">•</span>
-                            <span>Est. Delivery: <strong class="text-slate-900">₱{{ number_format($order->delivery_fee, 2) }}</strong></span>
+                            <span>Delivery Fee (COD): <strong class="text-slate-900">₱{{ number_format($pricing['estimated_delivery_fee'], 2) }}</strong></span>
                             <span class="text-slate-300">•</span>
-                            <span class="text-slate-900 font-black">Total: ₱{{ number_format($order->total_amount, 2) }}</span>
+                            <span>Courier Expense (Info):
+                                @if($pricing['has_actual_courier_fee'])
+                                    <strong class="text-slate-900">₱{{ number_format($pricing['actual_courier_fee'], 2) }}</strong>
+                                @else
+                                    <strong class="text-amber-600">Pending</strong>
+                                @endif
+                            </span>
+                            <span class="text-slate-300">•</span>
+                            <span class="text-slate-900 font-black">Customer Payable (COD): ₱{{ number_format($pricing['customer_payable_amount'], 2) }}</span>
                         </div>
 
                         <!-- Workflow Actions -->
