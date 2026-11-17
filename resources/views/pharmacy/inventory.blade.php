@@ -461,7 +461,7 @@
                     <i class="fas fa-search mr-1.5"></i> Select Existing
                 </button>
                 <button onclick="switchAddTab('new')" id="btn-tab-new" class="px-6 py-3 font-bold text-sm text-slate-400 border-b-4 border-transparent hover:text-slate-600 transition-colors">
-                    <i class="fas fa-plus-circle mr-1.5"></i> Create New Medicine
+                    <i class="fas fa-plus-circle mr-1.5"></i> Add New Medicine
                 </button>
             </div>
 
@@ -739,7 +739,7 @@
                     <div class="mt-8 pt-6 border-t border-slate-100">
                         <button type="submit" class="w-full py-4 text-white rounded-2xl font-black shadow-lg shadow-blue-200 hover:-translate-y-0.5 transition-all text-lg flex items-center justify-center gap-2"
                                 style="background-color: {{ $pharmacy->theme_color ?? '#2563eb' }};">
-                            <i class="fas fa-globe"></i> Create Global & Add to Stock
+                            <i class="fas fa-globe"></i> Add New Medicine
                         </button>
                     </div>
                 </form>
