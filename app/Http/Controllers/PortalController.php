@@ -279,7 +279,8 @@ class PortalController extends Controller
         }
 
         try {
-            \Illuminate\Support\Facades\DB::transaction(function () use ($pharmacy, $validated) {
+            $shouldNotifyRestock = false;
+            \Illuminate\Support\Facades\DB::transaction(function () use ($pharmacy, $validated, &$shouldNotifyRestock) {
                 // Check if already exists in their store (pessimistic check inside transaction)
                 if ($pharmacy->medicines()->where('medicines.id', $validated['medicine_id'])->exists()) {
                     throw new \InvalidArgumentException('Medicine already in inventory. Edit it instead.');
@@ -309,7 +310,8 @@ class PortalController extends Controller
                         'purchase_price' => $validated['purchase_price'] ?? null,
                         'storage_condition' => $validated['storage_condition'] ?? null,
                         'supplier' => $validated['supplier'] ?? null,
-                    ]);
+                    ], false);
+                    $shouldNotifyRestock = ((int) $validated['quantity_on_hand']) > 0;
                 }
 
                 \App\Models\AuditLog::create([
@@ -319,6 +321,10 @@ class PortalController extends Controller
                     'details' => "Added medicine ID {$validated['medicine_id']} to inventory. Initial stock: {$validated['quantity_on_hand']}, Price: {$validated['selling_price']}",
                 ]);
             });
+
+            if ($shouldNotifyRestock && class_exists(\App\Models\StockAlert::class)) {
+                \App\Models\StockAlert::checkAndNotify($pharmacy->id, $validated['medicine_id']);
+            }
         } catch (\InvalidArgumentException $e) {
             return redirect('/portal/inventory')->with('error', $e->getMessage());
         } catch (\Throwable $e) {
@@ -493,7 +499,9 @@ class PortalController extends Controller
         }
 
         try {
-            \Illuminate\Support\Facades\DB::transaction(function () use ($pharmacy, $validated, $imagePath, $request) {
+            $createdMedicineId = null;
+            $shouldNotifyRestock = false;
+            \Illuminate\Support\Facades\DB::transaction(function () use ($pharmacy, $validated, $imagePath, $request, &$createdMedicineId, &$shouldNotifyRestock) {
                 $nameForSlug = $validated['brand_name'] ?? $validated['generic_name'];
                 
                 $medicine = Medicine::create([
@@ -508,6 +516,7 @@ class PortalController extends Controller
                     'prescription_required' => $request->boolean('prescription_required'),
                     'image' => $imagePath,
                 ]);
+                $createdMedicineId = $medicine->id;
 
                 $usesBatches = $validated['quantity_on_hand'] > 0 || !empty($validated['batch_number']);
 
@@ -533,7 +542,8 @@ class PortalController extends Controller
                         'purchase_price' => $validated['purchase_price'] ?? null,
                         'storage_condition' => $validated['storage_condition'] ?? null,
                         'supplier' => $validated['supplier'] ?? null,
-                    ]);
+                    ], false);
+                    $shouldNotifyRestock = ((int) $validated['quantity_on_hand']) > 0;
                 }
 
                 \App\Models\AuditLog::create([
@@ -543,6 +553,10 @@ class PortalController extends Controller
                     'details' => "Created new medicine '{$validated['generic_name']}' and added to inventory. Stock: {$validated['quantity_on_hand']}",
                 ]);
             });
+
+            if ($shouldNotifyRestock && $createdMedicineId && class_exists(\App\Models\StockAlert::class)) {
+                \App\Models\StockAlert::checkAndNotify($pharmacy->id, $createdMedicineId);
+            }
         } catch (\Throwable $e) {
             if (!empty($imagePath)) {
                 try {
@@ -601,7 +615,8 @@ class PortalController extends Controller
         $oldStock = $existing->pivot->quantity_on_hand ?? 0;
 
         try {
-            \Illuminate\Support\Facades\DB::transaction(function () use ($pharmacy, $medicineId, $validated, $oldStock, $existing) {
+            $pendingStockAlert = null;
+            \Illuminate\Support\Facades\DB::transaction(function () use ($pharmacy, $medicineId, $validated, $oldStock, $existing, &$pendingStockAlert) {
                 $pharmacy->medicines()->updateExistingPivot($medicineId, [
                     'unit' => $validated['unit'], 
                     'selling_price' => $validated['selling_price'],
@@ -630,15 +645,17 @@ class PortalController extends Controller
                 $replenishedFromLowStock = ((int) $oldStock > 0 && (int) $oldStock <= $reorderLevel && $newQty > (int) $oldStock);
 
                 if ($restockedFromZero || $replenishedFromLowStock) {
-                    if (class_exists(\App\Models\StockAlert::class)) {
-                        \App\Models\StockAlert::checkAndNotify($pharmacy->id, $medicineId);
-                    }
+                    $pendingStockAlert = 'restock';
                 } elseif ((int) $oldStock > 0 && $newQty <= 0) {
-                    if (class_exists(\App\Models\StockAlert::class)) {
-                        \App\Models\StockAlert::notifyOutOfStock($pharmacy->id, $medicineId);
-                    }
+                    $pendingStockAlert = 'out_of_stock';
                 }
             });
+
+            if ($pendingStockAlert === 'restock' && class_exists(\App\Models\StockAlert::class)) {
+                \App\Models\StockAlert::checkAndNotify($pharmacy->id, $medicineId);
+            } elseif ($pendingStockAlert === 'out_of_stock' && class_exists(\App\Models\StockAlert::class)) {
+                \App\Models\StockAlert::notifyOutOfStock($pharmacy->id, $medicineId);
+            }
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::error('Inventory update failed: ' . $e->getMessage(), [
                 'pharmacy_id' => $pharmacy->id,

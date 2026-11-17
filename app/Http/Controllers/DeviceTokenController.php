@@ -14,7 +14,12 @@ class DeviceTokenController extends Controller
     public function registerToken(Request $request)
     {
         $validated = $request->validate([
-            'device_token' => 'required|string|max:255',
+            'device_token' => [
+                'required',
+                'string',
+                'max:255',
+                'regex:/^(ExponentPushToken|ExpoPushToken)\[[^\s\]]+\]$/',
+            ],
             'device_type' => 'nullable|string|in:android,ios,web',
         ]);
 

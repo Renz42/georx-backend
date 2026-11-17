@@ -93,9 +93,9 @@ class InventoryService
      * Recalculate total quantity for the pharmacy_medicine pivot table
      * based on all active, non-expired current batches.
      */
-    public function syncAggregate(int $pharmacyId, int $medicineId): void
+    public function syncAggregate(int $pharmacyId, int $medicineId, bool $dispatchAlerts = true): ?string
     {
-        DB::transaction(function () use ($pharmacyId, $medicineId) {
+        $txResult = DB::transaction(function () use ($pharmacyId, $medicineId) {
             $currentPivot = DB::table('pharmacy_medicine')
                 ->where('pharmacy_id', $pharmacyId)
                 ->where('medicine_id', $medicineId)
@@ -123,6 +123,9 @@ class InventoryService
                 ->first();
 
             $pharmacy = Pharmacy::find($pharmacyId);
+            $pendingStockAlert = null;
+            $lowStockNotify = null;
+
             if ($pharmacy) {
                 $pharmacy->medicines()->updateExistingPivot($medicineId, [
                     'quantity_on_hand' => $totalQuantity,
@@ -131,21 +134,14 @@ class InventoryService
                     'expiration_date' => $earliestActiveBatch?->expiration_date,
                 ]);
 
-                // RESTOCK ALERT: Zero-to-positive restock OR low-stock replenishment
+                // Determine post-commit stock alert (executed after transaction commits)
                 $restockedFromZero = (!$wasAvailable || $wasZeroStock) && $totalQuantity > 0;
                 $replenishedFromLowStock = $oldQuantity > 0 && $oldQuantity <= $reorderLevel && $totalQuantity > $oldQuantity;
 
                 if ($restockedFromZero || $replenishedFromLowStock) {
-                    if (class_exists(\App\Models\StockAlert::class)) {
-                        \App\Models\StockAlert::checkAndNotify($pharmacyId, $medicineId);
-                    }
-                }
-
-                // OUT OF STOCK ALERT: Notify subscribers when medicine becomes unavailable
-                if (!$wasZeroStock && $totalQuantity <= 0) {
-                    if (class_exists(\App\Models\StockAlert::class)) {
-                        \App\Models\StockAlert::notifyOutOfStock($pharmacyId, $medicineId);
-                    }
+                    $pendingStockAlert = 'restock';
+                } elseif (!$wasZeroStock && $totalQuantity <= 0) {
+                    $pendingStockAlert = 'out_of_stock';
                 }
 
                 // Check if stock fell below reorder level (low stock warning for pharmacy owner)
@@ -155,27 +151,54 @@ class InventoryService
                     ->first();
 
                 if ($pivot && $pivot->reorder_level && $totalQuantity <= $pivot->reorder_level) {
-                    // Notify pharmacy owner user(s)
                     $medicine = \App\Models\Medicine::find($medicineId);
                     $owner = \App\Models\User::where('pharmacy_id', $pharmacyId)
                         ->where('role', \App\Models\User::ROLE_PHARMACY_OWNER)
                         ->first();
                     if ($owner && $medicine) {
-                        $owner->notify(new \App\Notifications\LowStockTriggered(
-                            $medicine->brand_name ?? $medicine->generic_name,
-                            $totalQuantity,
-                            $pivot->reorder_level
-                        ));
+                        $lowStockNotify = [
+                            'owner' => $owner,
+                            'name' => $medicine->brand_name ?? $medicine->generic_name,
+                            'qty' => $totalQuantity,
+                            'reorder_level' => $pivot->reorder_level,
+                        ];
                     }
                 }
             }
+
+            return [
+                'stock_alert' => $pendingStockAlert,
+                'low_stock' => $lowStockNotify,
+            ];
         });
+
+        if (!empty($txResult['low_stock'])) {
+            $ls = $txResult['low_stock'];
+            try {
+                $ls['owner']->notify(new \App\Notifications\LowStockTriggered(
+                    $ls['name'],
+                    $ls['qty'],
+                    $ls['reorder_level']
+                ));
+            } catch (\Throwable) {
+            }
+        }
+
+        if ($dispatchAlerts && !empty($txResult['stock_alert']) && class_exists(\App\Models\StockAlert::class)) {
+            if ($txResult['stock_alert'] === 'restock') {
+                \App\Models\StockAlert::checkAndNotify($pharmacyId, $medicineId);
+            } elseif ($txResult['stock_alert'] === 'out_of_stock') {
+                \App\Models\StockAlert::notifyOutOfStock($pharmacyId, $medicineId);
+            }
+        }
+
+        return $txResult['stock_alert'] ?? null;
     }
 
     /**
      * Add a new inventory batch for a medicine and update aggregate totals
      */
-    public function addBatch(int $pharmacyId, int $medicineId, array $batchData): InventoryBatch
+    public function addBatch(int $pharmacyId, int $medicineId, array $batchData, bool $dispatchAlerts = true): InventoryBatch
     {
         $batch = InventoryBatch::create([
             'pharmacy_id' => $pharmacyId,
@@ -190,7 +213,7 @@ class InventoryService
             'received_at' => $batchData['received_at'] ?? now(),
         ]);
 
-        $this->syncAggregate($pharmacyId, $medicineId);
+        $this->syncAggregate($pharmacyId, $medicineId, $dispatchAlerts);
 
         return $batch;
     }

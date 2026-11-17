@@ -599,7 +599,13 @@ class NotificationSystemRepairTest extends TestCase
         $userB = $actors['otherCustomer'];
         $pharmacy = $actors['pharmacy'];
 
-        // User A registers device token
+        // Invalid token format rejected cleanly with 422 validation error
+        $this->actingAs($userA, 'sanctum')->postJson('/api/device-tokens', [
+            'device_token' => 'not-an-expo-token',
+            'device_type' => 'android',
+        ])->assertStatus(422);
+
+        // User A registers valid Expo device token
         $this->actingAs($userA, 'sanctum')->postJson('/api/device-tokens', [
             'device_token' => 'ExponentPushToken[shared-device-999]',
             'device_type' => 'android',
