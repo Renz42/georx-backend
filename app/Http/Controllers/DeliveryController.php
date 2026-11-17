@@ -50,6 +50,28 @@ class DeliveryController extends Controller
             'status' => 'accepted',
         ]);
 
+        $driver = Auth::user();
+        $driverName = $driver?->name ?? 'A delivery partner';
+        $order->driver_name = $order->driver_name ?: $driverName;
+
+        $notificationService = app(\App\Services\PatientNotificationService::class);
+        $notificationService->notifyOrderCustomer(
+            $order,
+            'driver_assigned:' . (Auth::id() ?? 'partner'),
+            new \App\Notifications\OrderStatusChanged(
+                $order,
+                "{$driverName} accepted delivery for Order #{$order->id} and is heading to the pharmacy.",
+                'fas fa-motorcycle text-blue-500'
+            )
+        );
+        $notificationService->notifyOrderPharmacy(
+            $order,
+            'driver_assigned:' . (Auth::id() ?? 'partner'),
+            new \App\Notifications\DeliveryAcceptedByDriver($order),
+            null,
+            false
+        );
+
         return redirect()->route('delivery.dashboard')->with('success', 'Order #' . $order->id . ' accepted! Head to the pharmacy.');
     }
 
@@ -83,15 +105,53 @@ class DeliveryController extends Controller
 
         $order->update($updateData);
 
-        if ($request->status === 'delivered') {
+        $driver = Auth::user();
+        $notificationService = app(\App\Services\PatientNotificationService::class);
+
+        if ($request->status === 'at_pharmacy' && $driver) {
+            $notificationService->notifyOrderCustomer(
+                $order,
+                'arrived_at_pickup',
+                new \App\Notifications\DriverArrivedAtPharmacyNotification($order, $driver, 'customer')
+            );
+            $notificationService->notifyOrderPharmacy(
+                $order,
+                'arrived_at_pickup',
+                new \App\Notifications\DriverArrivedAtPharmacyNotification($order, $driver, 'pharmacy'),
+                null,
+                false
+            );
+        } elseif ($request->status === 'picked_up' && $driver) {
+            $notificationService->notifyOrderCustomer(
+                $order,
+                'picked_up',
+                new \App\Notifications\OrderPickedUpNotification($order, $driver)
+            );
+        } elseif ($request->status === 'delivered') {
             try {
                 \Illuminate\Support\Facades\Cache::forget('admin_dashboard_data_v3');
                 \Illuminate\Support\Facades\Cache::forget('admin_dashboard_data_v4');
             } catch (\Throwable) {
             }
-            try {
-                $order->user?->notify(new \App\Notifications\ReviewPrompt($order));
-            } catch (\Throwable $e) {}
+
+            if ($driver) {
+                $notificationService->notifyOrderCustomer(
+                    $order,
+                    'delivered',
+                    new \App\Notifications\OrderDeliveredNotification($order, $driver)
+                );
+            } else {
+                $notificationService->notifyOrderCustomer(
+                    $order,
+                    'delivered',
+                    new \App\Notifications\OrderDelivered($order)
+                );
+            }
+            $notificationService->notifyOrderCustomer(
+                $order,
+                'review_prompt',
+                new \App\Notifications\ReviewPrompt($order)
+            );
         }
 
         $message = match($request->status) {
@@ -154,35 +214,37 @@ class DeliveryController extends Controller
             return response()->json(['error' => 'Booking reference mismatch.'], 422);
         }
 
-        return \Illuminate\Support\Facades\DB::transaction(function () use ($order, $status, $payload, $bookingId) {
+        $txResult = \Illuminate\Support\Facades\DB::transaction(function () use ($order, $status, $payload, $bookingId) {
             $order = Order::where('id', $order->id)->lockForUpdate()->firstOrFail();
 
             // Re-verify provider and booking reference against locked database record
             if ($order->delivery_provider !== 'maxim') {
-                return response()->json(['error' => 'Order is not managed by Maxim delivery provider.'], 422);
+                return ['response' => response()->json(['error' => 'Order is not managed by Maxim delivery provider.'], 422)];
             }
 
             if (empty($order->delivery_booking_id) || (string)$order->delivery_booking_id !== $bookingId) {
-                return response()->json(['error' => 'Booking reference mismatch.'], 422);
+                return ['response' => response()->json(['error' => 'Booking reference mismatch.'], 422)];
             }
 
             // Pharmacy confirmation check: unconfirmed orders cannot be dispatched/completed
             if (!$order->pharmacy_confirmed) {
-                return response()->json(['error' => 'Order has not been confirmed by pharmacy.'], 422);
+                return ['response' => response()->json(['error' => 'Order has not been confirmed by pharmacy.'], 422)];
             }
 
             // Terminal state check
             if (in_array($order->status, [Order::STATUS_CANCELLED, Order::STATUS_REJECTED], true)) {
-                return response()->json(['error' => 'Order is in a terminal cancelled/rejected state.'], 422);
+                return ['response' => response()->json(['error' => 'Order is in a terminal cancelled/rejected state.'], 422)];
             }
 
             // Eager load relationships to avoid N+1 queries inside the switch
             $order->load('user', 'pharmacy');
+            $pharmacyName = $order->pharmacy?->name ?? 'the pharmacy';
+            $events = [];
 
             switch ($status) {
                 case 'driver_assigned':
                     if (in_array($order->status, [Order::STATUS_DELIVERED, Order::STATUS_PICKED_UP], true)) {
-                        return response()->json(['success' => true, 'ignored' => 'Order is already picked up or delivered.']);
+                        return ['response' => response()->json(['success' => true, 'ignored' => 'Order is already picked up or delivered.'])];
                     }
                     $order->update([
                         'status' => Order::STATUS_ACCEPTED,
@@ -191,43 +253,55 @@ class DeliveryController extends Controller
                         'driver_vehicle' => $payload['driver']['vehicle'] ?? ($order->driver_vehicle ?: ''),
                         'estimated_delivery_at' => isset($payload['eta']) ? \Carbon\Carbon::parse($payload['eta']) : $order->estimated_delivery_at,
                     ]);
-                    try {
-                        $order->user?->notify(new \App\Notifications\DriverAssigned($order));
-                        $pharmacyUser = \App\Models\User::where('pharmacy_id', $order->pharmacy_id)->first();
-                        if ($pharmacyUser) {
-                            $pharmacyUser->notify(new \App\Notifications\DeliveryAcceptedByDriver($order));
-                        }
-                    } catch (\Throwable $e) {}
+                    $driverKey = strtolower(trim((string) ($order->driver_name ?: 'driver')));
+                    $events[] = ['target' => 'customer', 'suffix' => "driver_assigned:{$driverKey}", 'notification' => new \App\Notifications\DriverAssigned($order)];
+                    $events[] = ['target' => 'pharmacy', 'suffix' => "driver_assigned:{$driverKey}", 'notification' => new \App\Notifications\DeliveryAcceptedByDriver($order)];
                     break;
 
                 case 'arrived_at_pickup':
                     if (in_array($order->status, [Order::STATUS_DELIVERED, Order::STATUS_PICKED_UP], true)) {
-                        return response()->json(['success' => true, 'ignored' => 'Order is already picked up or delivered.']);
+                        return ['response' => response()->json(['success' => true, 'ignored' => 'Order is already picked up or delivered.'])];
                     }
                     $order->update(['status' => Order::STATUS_AT_PHARMACY]);
+                    $events[] = [
+                        'target' => 'customer',
+                        'suffix' => 'arrived_at_pickup',
+                        'notification' => new \App\Notifications\OrderStatusChanged(
+                            $order,
+                            "Your courier driver has arrived at {$pharmacyName} to pick up Order #{$order->id}.",
+                            'fas fa-store text-blue-500'
+                        ),
+                    ];
                     break;
 
                 case 'picked_up':
                     if ($order->status === Order::STATUS_DELIVERED || $order->delivery_status === 'delivered') {
-                        return response()->json(['success' => true, 'ignored' => 'Order is already delivered.']);
+                        return ['response' => response()->json(['success' => true, 'ignored' => 'Order is already delivered.'])];
                     }
                     $order->update([
                         'status' => Order::STATUS_PICKED_UP,
                         'delivery_status' => 'in_transit',
                         'picked_up_at' => $order->picked_up_at ?? now(),
                     ]);
+                    $events[] = [
+                        'target' => 'customer',
+                        'suffix' => 'picked_up',
+                        'notification' => new \App\Notifications\OrderStatusChanged(
+                            $order,
+                            "Your order #{$order->id} has been picked up from {$pharmacyName} and is now out for delivery!",
+                            'fas fa-shipping-fast text-indigo-500'
+                        ),
+                    ];
                     break;
 
                 case 'arrived_at_dropoff':
-                    try {
-                        $order->user?->notify(new \App\Notifications\DriverArrived($order));
-                    } catch (\Throwable $e) {}
+                    $events[] = ['target' => 'customer', 'suffix' => 'arrived_at_dropoff', 'notification' => new \App\Notifications\DriverArrived($order)];
                     break;
 
                 case 'completed':
                     // Idempotent duplicate event check
                     if ($order->status === Order::STATUS_DELIVERED || $order->delivery_status === 'delivered') {
-                        return response()->json(['success' => true, 'already_delivered' => true]);
+                        return ['response' => response()->json(['success' => true, 'already_delivered' => true])];
                     }
 
                     // Verify dispatch / pickup requirement: Cannot complete an undispatched order
@@ -236,7 +310,7 @@ class DeliveryController extends Controller
                         || !empty($order->picked_up_at);
 
                     if (!$isDispatched) {
-                        return response()->json(['error' => 'Cannot mark order completed without prior dispatch/pickup.'], 422);
+                        return ['response' => response()->json(['error' => 'Cannot mark order completed without prior dispatch/pickup.'], 422)];
                     }
 
                     $order->update([
@@ -251,27 +325,61 @@ class DeliveryController extends Controller
                     } catch (\Throwable) {
                     }
 
-                    try {
-                        $order->user?->notify(new \App\Notifications\OrderDelivered($order));
-                        $order->user?->notify(new \App\Notifications\ReviewPrompt($order));
-                    } catch (\Throwable $e) {}
+                    $events[] = ['target' => 'customer', 'suffix' => 'delivered', 'notification' => new \App\Notifications\OrderDelivered($order)];
+                    $events[] = ['target' => 'customer', 'suffix' => 'review_prompt', 'notification' => new \App\Notifications\ReviewPrompt($order)];
                     break;
 
                 case 'cancelled':
                     if ($order->status === Order::STATUS_DELIVERED || $order->delivery_status === 'delivered') {
-                        return response()->json(['error' => 'Cannot cancel an order that has already been delivered.'], 422);
+                        return ['response' => response()->json(['error' => 'Cannot cancel an order that has already been delivered.'], 422)];
                     }
                     $order->update([
                         'status' => Order::STATUS_CANCELLED,
                         'delivery_status' => 'cancelled',
                     ]);
+                    $events[] = [
+                        'target' => 'customer',
+                        'suffix' => 'courier_cancelled',
+                        'notification' => new \App\Notifications\OrderStatusChanged(
+                            $order,
+                            "Delivery for Order #{$order->id} was cancelled by the courier.",
+                            'fas fa-exclamation-triangle text-rose-500'
+                        ),
+                    ];
+                    $events[] = [
+                        'target' => 'pharmacy',
+                        'suffix' => 'courier_cancelled',
+                        'notification' => new \App\Notifications\OrderStatusChanged(
+                            $order,
+                            "Courier cancelled delivery for Order #{$order->id}. Please review and rebook if needed.",
+                            'fas fa-exclamation-triangle text-amber-500'
+                        ),
+                    ];
                     break;
 
                 default:
-                    return response()->json(['error' => 'Unsupported webhook status: ' . $status], 422);
+                    return ['response' => response()->json(['error' => 'Unsupported webhook status: ' . $status], 422)];
             }
 
-            return response()->json(['success' => true]);
+            return [
+                'response' => response()->json(['success' => true]),
+                'order' => $order,
+                'events' => $events,
+            ];
         });
+
+        if (!empty($txResult['events']) && isset($txResult['order'])) {
+            $notificationService = app(\App\Services\PatientNotificationService::class);
+            $updatedOrder = $txResult['order'];
+            foreach ($txResult['events'] as $evt) {
+                if ($evt['target'] === 'pharmacy') {
+                    $notificationService->notifyOrderPharmacy($updatedOrder, $evt['suffix'], $evt['notification'], null, false);
+                } else {
+                    $notificationService->notifyOrderCustomer($updatedOrder, $evt['suffix'], $evt['notification']);
+                }
+            }
+        }
+
+        return $txResult['response'];
     }
 }

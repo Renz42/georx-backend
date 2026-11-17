@@ -28,10 +28,14 @@ class OrderOutForDeliveryNotification extends Notification
     public function toArray($notifiable): array
     {
         return [
-            'order_id' => $this->order->id,
-            'message'  => "Driver {$this->driver->name} is now out for delivery heading to your location for Order #{$this->order->id}.",
-            'icon'     => 'fas fa-shipping-fast text-blue-500',
-            'url'      => "/orders/{$this->order->id}",
+            'type' => 'delivery_update',
+            'status' => 'out_for_delivery',
+            'title' => 'Out for Delivery',
+            'order_id' => (int) $this->order->id,
+            'message' => "Driver {$this->driver->name} is now out for delivery heading to your location for Order #{$this->order->id}.",
+            'icon' => 'fas fa-shipping-fast text-blue-500',
+            'action_url' => "/orders/{$this->order->id}",
+            'url' => route('orders.show', $this->order->id),
         ];
     }
 }

@@ -344,13 +344,25 @@ class OrderController extends Controller
             return redirect()->route('cart.index')->with('error', $safeMsg);
         }
 
-        // Notify pharmacy
-        $pharmacyUser = \App\Models\User::where('pharmacy_id', $pharmacy->id)->first();
-        if ($pharmacyUser) {
-            try {
-                $pharmacyUser->notify(new \App\Notifications\NewOrderReceived($order));
-            } catch (\Throwable $e) {}
-        }
+        // Notify pharmacy staff and confirm order receipt to customer
+        $notificationService = app(\App\Services\PatientNotificationService::class);
+        $notificationService->notifyOrderPharmacy(
+            $order,
+            'placed',
+            new \App\Notifications\NewOrderReceived($order),
+            null,
+            false
+        );
+
+        $notificationService->notifyOrderCustomer(
+            $order,
+            'placed',
+            new \App\Notifications\OrderStatusChanged(
+                $order,
+                "Your order #{$order->id} has been placed at {$pharmacy->name} and is waiting for pharmacy confirmation.",
+                'fas fa-receipt text-emerald-500'
+            )
+        );
 
         if ($isApi) {
             $order->load('items.medicine', 'pharmacy');
@@ -370,12 +382,47 @@ class OrderController extends Controller
         $order = Order::where('id', $id)->where('user_id', Auth::id())->firstOrFail();
 
         if ($order->status !== Order::STATUS_PENDING_CONFIRMATION) {
+            if (request()->wantsJson()) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Order cannot be cancelled at this stage.',
+                ], 422);
+            }
             return back()->with('error', 'Order cannot be cancelled at this stage.');
         }
 
         $order->update([
             'status' => Order::STATUS_CANCELLED
         ]);
+
+        $notificationService = app(\App\Services\PatientNotificationService::class);
+        $notificationService->notifyOrderCustomer(
+            $order,
+            'cancelled',
+            new \App\Notifications\OrderStatusChanged(
+                $order,
+                "Your order #{$order->id} has been cancelled.",
+                'fas fa-times-circle text-rose-500'
+            )
+        );
+        $notificationService->notifyOrderPharmacy(
+            $order,
+            'cancelled',
+            new \App\Notifications\OrderStatusChanged(
+                $order,
+                "Order #{$order->id} was cancelled by the customer.",
+                'fas fa-ban text-rose-500'
+            ),
+            null,
+            false
+        );
+
+        if (request()->wantsJson()) {
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Order cancelled successfully.',
+            ]);
+        }
 
         return back()->with('success', 'Order cancelled successfully.');
     }

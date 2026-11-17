@@ -285,21 +285,23 @@ class PortalController extends Controller
                     throw new \InvalidArgumentException('Medicine already in inventory. Edit it instead.');
                 }
 
+                $usesBatches = $validated['quantity_on_hand'] > 0 || !empty($validated['batch_number']);
+
                 $pharmacy->medicines()->attach($validated['medicine_id'], [
                     'unit' => $validated['unit'],
                     'selling_price' => $validated['selling_price'],
                     'purchase_price' => $validated['purchase_price'] ?? null,
-                    'quantity_on_hand' => $validated['quantity_on_hand'],
+                    'quantity_on_hand' => $usesBatches ? 0 : $validated['quantity_on_hand'],
                     'reorder_level' => $validated['reorder_level'] ?? 10,
                     'batch_number' => $validated['batch_number'] ?? null,
                     'expiration_date' => $validated['expiration_date'] ?? null,
                     'storage_condition' => $validated['storage_condition'] ?? null,
                     'supplier' => $validated['supplier'] ?? null,
                     'last_restocked_at' => $validated['last_restocked_at'] ?? null,
-                    'is_available' => $validated['quantity_on_hand'] > 0,
+                    'is_available' => false,
                 ]);
 
-                if ($validated['quantity_on_hand'] > 0 || !empty($validated['batch_number'])) {
+                if ($usesBatches) {
                     app(\App\Services\InventoryService::class)->addBatch($pharmacy->id, $validated['medicine_id'], [
                         'batch_number' => $validated['batch_number'] ?? ('BATCH-' . strtoupper(\Illuminate\Support\Str::random(6))),
                         'expiration_date' => $validated['expiration_date'] ?? null,
@@ -316,12 +318,6 @@ class PortalController extends Controller
                     'action' => 'Added to Inventory',
                     'details' => "Added medicine ID {$validated['medicine_id']} to inventory. Initial stock: {$validated['quantity_on_hand']}, Price: {$validated['selling_price']}",
                 ]);
-
-                if ($validated['quantity_on_hand'] > 0) {
-                    if (class_exists(\App\Models\StockAlert::class)) {
-                        \App\Models\StockAlert::checkAndNotify($pharmacy->id, $validated['medicine_id']);
-                    }
-                }
             });
         } catch (\InvalidArgumentException $e) {
             return redirect('/portal/inventory')->with('error', $e->getMessage());
@@ -513,21 +509,23 @@ class PortalController extends Controller
                     'image' => $imagePath,
                 ]);
 
+                $usesBatches = $validated['quantity_on_hand'] > 0 || !empty($validated['batch_number']);
+
                 $pharmacy->medicines()->attach($medicine->id, [
                     'unit' => $validated['unit'], 
                     'selling_price' => $validated['selling_price'],
                     'purchase_price' => $validated['purchase_price'] ?? null,
-                    'quantity_on_hand' => $validated['quantity_on_hand'],
+                    'quantity_on_hand' => $usesBatches ? 0 : $validated['quantity_on_hand'],
                     'reorder_level' => $validated['reorder_level'] ?? 10,
                     'batch_number' => $validated['batch_number'] ?? null,
                     'expiration_date' => $validated['expiration_date'] ?? null,
                     'storage_condition' => $validated['storage_condition'] ?? null,
                     'supplier' => $validated['supplier'] ?? null,
                     'last_restocked_at' => $validated['last_restocked_at'] ?? null,
-                    'is_available' => $validated['quantity_on_hand'] > 0,
+                    'is_available' => false,
                 ]);
 
-                if ($validated['quantity_on_hand'] > 0 || !empty($validated['batch_number'])) {
+                if ($usesBatches) {
                     app(\App\Services\InventoryService::class)->addBatch($pharmacy->id, $medicine->id, [
                         'batch_number' => $validated['batch_number'] ?? ('BATCH-' . strtoupper(\Illuminate\Support\Str::random(6))),
                         'expiration_date' => $validated['expiration_date'] ?? null,
@@ -626,11 +624,16 @@ class PortalController extends Controller
                     'details' => "Updated '{$medicineName}'. Old stock: {$oldStock}, New stock: {$validated['quantity_on_hand']}. Price: {$validated['selling_price']}",
                 ]);
 
-                if ($oldStock == 0 && $validated['quantity_on_hand'] > 0) {
+                $newQty = (int) $validated['quantity_on_hand'];
+                $reorderLevel = (int) ($validated['reorder_level'] ?? $existing->pivot->reorder_level ?? 10);
+                $restockedFromZero = ((int) $oldStock <= 0 && $newQty > 0);
+                $replenishedFromLowStock = ((int) $oldStock > 0 && (int) $oldStock <= $reorderLevel && $newQty > (int) $oldStock);
+
+                if ($restockedFromZero || $replenishedFromLowStock) {
                     if (class_exists(\App\Models\StockAlert::class)) {
                         \App\Models\StockAlert::checkAndNotify($pharmacy->id, $medicineId);
                     }
-                } elseif ($oldStock > 0 && $validated['quantity_on_hand'] == 0) {
+                } elseif ((int) $oldStock > 0 && $newQty <= 0) {
                     if (class_exists(\App\Models\StockAlert::class)) {
                         \App\Models\StockAlert::notifyOutOfStock($pharmacy->id, $medicineId);
                     }
@@ -1305,12 +1308,16 @@ class PortalController extends Controller
             'fifo_deductions' => $allDeductions
         ]);
 
-        // Notify user
-        $order->user->notify(new \App\Notifications\OrderStatusChanged(
+        // Notify customer (DB + Push)
+        app(\App\Services\PatientNotificationService::class)->notifyOrderCustomer(
             $order,
-            'Your order has been confirmed by the pharmacy and is being prepared.',
-            'fas fa-check-circle text-emerald-500'
-        ));
+            'confirmed',
+            new \App\Notifications\OrderStatusChanged(
+                $order,
+                'Your order has been confirmed by the pharmacy and is being prepared.',
+                'fas fa-check-circle text-emerald-500'
+            )
+        );
 
         return back()->with('success', 'Order #' . $order->id . ' confirmed! You may now prepare the items and dispatch via Grab Express or Maxim.');
     }
@@ -1334,8 +1341,16 @@ class PortalController extends Controller
             'rejection_reason' => $request->reason
         ]);
 
-        // Notify user
-        $order->user->notify(new \App\Notifications\OrderStatusChanged($order, 'Your order was rejected: ' . $request->reason, 'fas fa-times-circle text-rose-500'));
+        // Notify customer (DB + Push)
+        app(\App\Services\PatientNotificationService::class)->notifyOrderCustomer(
+            $order,
+            'rejected',
+            new \App\Notifications\OrderStatusChanged(
+                $order,
+                'Your order was rejected: ' . $request->reason,
+                'fas fa-times-circle text-rose-500'
+            )
+        );
 
         return back()->with('success', 'Order #' . $order->id . ' has been rejected.');
     }
@@ -1346,12 +1361,16 @@ class PortalController extends Controller
         $order = \App\Models\Order::where('id', $id)->where('pharmacy_id', $pharmacy->id)->firstOrFail();
 
         $order->update(['is_prepared' => true]);
-        
-        $order->user->notify(new \App\Notifications\OrderStatusChanged(
+
+        app(\App\Services\PatientNotificationService::class)->notifyOrderCustomer(
             $order,
-            'Your order is prepared and ready for delivery courier pickup!',
-            'fas fa-box text-blue-500'
-        ));
+            'prepared',
+            new \App\Notifications\OrderStatusChanged(
+                $order,
+                'Your order is prepared and ready for delivery courier pickup!',
+                'fas fa-box text-blue-500'
+            )
+        );
 
         return back()->with('success', 'Order #' . $order->id . ' marked as prepared! You may now book and dispatch via Grab Express or Maxim.');
     }
@@ -1426,12 +1445,16 @@ class PortalController extends Controller
 
         $providerLabel = $validated['delivery_provider'] === 'grab' ? 'Grab Express' : 'Maxim';
 
-        // Notify patient
-        $order->user->notify(new \App\Notifications\OrderStatusChanged(
+        // Notify patient (DB + Push)
+        app(\App\Services\PatientNotificationService::class)->notifyOrderCustomer(
             $order,
-            "Your order has been booked with {$providerLabel}! Booking Ref: {$bookingCheck['normalized_booking_id']}",
-            'fas fa-shipping-fast text-emerald-500'
-        ));
+            'courier_booked:' . $bookingCheck['normalized_booking_id'],
+            new \App\Notifications\OrderStatusChanged(
+                $order,
+                "Your order has been booked with {$providerLabel}! Booking Ref: {$bookingCheck['normalized_booking_id']}",
+                'fas fa-shipping-fast text-emerald-500'
+            )
+        );
 
         return back()->with('success', "Order #{$order->id} successfully booked via {$providerLabel}! Booking Reference: {$bookingCheck['normalized_booking_id']}");
     }
@@ -1523,13 +1546,15 @@ class PortalController extends Controller
             $order->update($updateData);
             $this->clearAdminDashboardCache();
 
-            try {
-                $order->user?->notify(new \App\Notifications\OrderStatusChanged(
+            app(\App\Services\PatientNotificationService::class)->notifyOrderCustomer(
+                $order,
+                'in_transit',
+                new \App\Notifications\OrderStatusChanged(
                     $order,
                     "Your package was picked up by the {$providerLabel} rider and is on the way!",
                     'fas fa-motorcycle text-indigo-500'
-                ));
-            } catch (\Throwable $e) {}
+                )
+            );
 
             return back()->with('success', "Order #{$order->id} status updated: In Transit with {$providerLabel}.");
         }
@@ -1560,15 +1585,21 @@ class PortalController extends Controller
             $order->update($deliveredUpdate);
             $this->clearAdminDashboardCache();
 
-            try {
-                $order->user?->notify(new \App\Notifications\OrderStatusChanged(
+            $notificationService = app(\App\Services\PatientNotificationService::class);
+            $notificationService->notifyOrderCustomer(
+                $order,
+                'delivered',
+                new \App\Notifications\OrderStatusChanged(
                     $order,
                     "Your package has been delivered by {$providerLabel}! Please confirm receipt and share your review.",
                     'fas fa-check-circle text-emerald-500'
-                ));
-
-                $order->user?->notify(new \App\Notifications\ReviewPrompt($order));
-            } catch (\Throwable $e) {}
+                )
+            );
+            $notificationService->notifyOrderCustomer(
+                $order,
+                'review_prompt',
+                new \App\Notifications\ReviewPrompt($order)
+            );
 
             return back()->with('success', "Order #{$order->id} marked as delivered by {$providerLabel}.");
         }

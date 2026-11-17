@@ -39,25 +39,33 @@ class DriverAssignedNotification extends Notification
      */
     public function toArray($notifiable): array
     {
-        $driverName = $this->driver->name;
+        $driverName = $this->driver->name ?? 'Driver';
         $driverPhone = $this->driver->phone ?? 'N/A';
         $driverProfile = $this->driver->driverProfile;
         $vehicleInfo = $driverProfile ? trim(($driverProfile->vehicle_make ?? '') . ' ' . ($driverProfile->vehicle_model ?? '')) : 'Motorcycle';
 
         if ($this->recipientType === 'pharmacy') {
             return [
-                'order_id' => $this->order->id,
-                'message'  => "Driver {$driverName} ({$driverPhone}) has accepted delivery for Order #{$this->order->id} and is heading to your pharmacy.",
-                'icon'     => 'fas fa-motorcycle text-indigo-500',
-                'url'      => '/portal/orders',
+                'type' => 'delivery_update',
+                'status' => 'driver_assigned',
+                'title' => 'Driver Assigned #' . $this->order->id,
+                'order_id' => (int) $this->order->id,
+                'message' => "Driver {$driverName} ({$driverPhone}) has accepted delivery for Order #{$this->order->id} and is heading to your pharmacy.",
+                'icon' => 'fas fa-motorcycle text-indigo-500',
+                'action_url' => '/portal/orders',
+                'url' => '/portal/orders',
             ];
         }
 
         return [
-            'order_id' => $this->order->id,
-            'message'  => "Driver {$driverName} ({$vehicleInfo}) has accepted your delivery order #{$this->order->id}!",
-            'icon'     => 'fas fa-truck text-emerald-500',
-            'url'      => "/orders/{$this->order->id}",
+            'type' => 'delivery_update',
+            'status' => 'driver_assigned',
+            'title' => 'Driver Assigned',
+            'order_id' => (int) $this->order->id,
+            'message' => "Driver {$driverName} ({$vehicleInfo}) has accepted your delivery order #{$this->order->id}!",
+            'icon' => 'fas fa-truck text-emerald-500',
+            'action_url' => "/orders/{$this->order->id}",
+            'url' => route('orders.show', $this->order->id),
         ];
     }
 }

@@ -24,10 +24,12 @@ class NewOrderReceived extends Notification
     public function toArray($notifiable)
     {
         return [
+            'type' => 'order_received',
+            'order_id' => (int) $this->order->id,
             'title' => 'New Order Received',
             'message' => 'Order #' . $this->order->id . ' needs your confirmation.',
             'url' => route('portal.orders', ['status' => 'pending_confirmation']),
-            'icon' => 'fas fa-shopping-bag text-indigo-500'
+            'icon' => 'fas fa-shopping-bag text-indigo-500',
         ];
     }
 }

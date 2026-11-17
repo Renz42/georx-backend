@@ -23,11 +23,16 @@ class DeliveryAcceptedByDriver extends Notification
 
     public function toArray($notifiable)
     {
+        $driverName = $this->order->driver_name ?: 'A courier rider';
+
         return [
+            'type' => 'delivery_update',
+            'status' => 'driver_assigned',
             'title' => 'Rider Assigned',
-            'message' => 'Rider ' . $this->order->driver_name . ' is heading to your pharmacy for Order #' . $this->order->id,
+            'order_id' => (int) $this->order->id,
+            'message' => 'Rider ' . $driverName . ' is heading to your pharmacy for Order #' . $this->order->id,
             'url' => route('portal.orders', ['status' => 'accepted']),
-            'icon' => 'fas fa-motorcycle text-indigo-500'
+            'icon' => 'fas fa-motorcycle text-indigo-500',
         ];
     }
 }

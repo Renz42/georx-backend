@@ -31,7 +31,9 @@ class NotificationController extends Controller
                         'title' => $nData['title'] ?? null,
                         'message' => $nData['message'] ?? 'You have a new notification.',
                         'is_read' => !is_null($n->read_at),
-                        'created_at' => $n->created_at,
+                        'read_at' => $n->read_at ? $n->read_at->toIso8601String() : null,
+                        'created_at' => $n->created_at ? $n->created_at->toIso8601String() : null,
+                        'created_at_human' => $n->created_at ? $n->created_at->diffForHumans() : 'Recently',
                         'data' => $nData,
                     ];
                 }),
@@ -75,7 +77,7 @@ class NotificationController extends Controller
     {
         $user = Auth::user();
 
-        if ($notification->notifiable_id !== $user->id) {
+        if ((int) $notification->notifiable_id !== (int) $user->id || $notification->notifiable_type !== $user->getMorphClass()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Unauthorized.'
@@ -86,7 +88,8 @@ class NotificationController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Notification marked as read.'
+            'message' => 'Notification marked as read.',
+            'unread_count' => $user->unreadNotifications()->count(),
         ]);
     }
 
@@ -95,11 +98,12 @@ class NotificationController extends Controller
     {
         $user = Auth::user();
 
-        $user->unreadNotifications->markAsRead();
+        $user->unreadNotifications()->update(['read_at' => now()]);
 
         return response()->json([
             'success' => true,
-            'message' => 'All notifications marked as read.'
+            'message' => 'All notifications marked as read.',
+            'unread_count' => 0,
         ]);
     }
 
@@ -112,7 +116,8 @@ class NotificationController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'All notifications deleted.'
+            'message' => 'All notifications deleted.',
+            'unread_count' => 0,
         ]);
     }
 
@@ -121,7 +126,7 @@ class NotificationController extends Controller
     {
         $user = Auth::user();
 
-        if ($notification->notifiable_id !== $user->id) {
+        if ((int) $notification->notifiable_id !== (int) $user->id || $notification->notifiable_type !== $user->getMorphClass()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Unauthorized.'
@@ -132,7 +137,8 @@ class NotificationController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Notification deleted.'
+            'message' => 'Notification deleted.',
+            'unread_count' => $user->unreadNotifications()->count(),
         ]);
     }
 
@@ -140,17 +146,24 @@ class NotificationController extends Controller
     public function subscribeStockAlert(Request $request)
     {
         $request->validate([
-            'pharmacy_id' => 'required|exists:pharmacies,id',
+            'pharmacy_id' => 'nullable|exists:pharmacies,id',
             'medicine_id' => 'required|exists:medicines,id',
         ]);
 
         $user = Auth::user();
+        $pharmacyId = $request->filled('pharmacy_id') ? (int) $request->pharmacy_id : null;
 
-        // Check if alert already exists
-        $existing = StockAlert::where('user_id', $user->id)
-            ->where('pharmacy_id', $request->pharmacy_id)
-            ->where('medicine_id', $request->medicine_id)
-            ->first();
+        // Check if alert already exists (handle PostgreSQL NULL semantics explicitly)
+        $query = StockAlert::where('user_id', $user->id)
+            ->where('medicine_id', $request->medicine_id);
+
+        if ($pharmacyId === null) {
+            $query->whereNull('pharmacy_id');
+        } else {
+            $query->where('pharmacy_id', $pharmacyId);
+        }
+
+        $existing = $query->first();
 
         if ($existing) {
             // Reactivate if inactive
@@ -170,7 +183,7 @@ class NotificationController extends Controller
 
         StockAlert::create([
             'user_id' => $user->id,
-            'pharmacy_id' => $request->pharmacy_id,
+            'pharmacy_id' => $pharmacyId,
             'medicine_id' => $request->medicine_id,
         ]);
 
@@ -184,16 +197,23 @@ class NotificationController extends Controller
     public function unsubscribeStockAlert(Request $request)
     {
         $request->validate([
-            'pharmacy_id' => 'required|exists:pharmacies,id',
+            'pharmacy_id' => 'nullable|exists:pharmacies,id',
             'medicine_id' => 'required|exists:medicines,id',
         ]);
 
         $user = Auth::user();
+        $pharmacyId = $request->filled('pharmacy_id') ? (int) $request->pharmacy_id : null;
 
-        $alert = StockAlert::where('user_id', $user->id)
-            ->where('pharmacy_id', $request->pharmacy_id)
-            ->where('medicine_id', $request->medicine_id)
-            ->first();
+        $query = StockAlert::where('user_id', $user->id)
+            ->where('medicine_id', $request->medicine_id);
+
+        if ($pharmacyId === null) {
+            $query->whereNull('pharmacy_id');
+        } else {
+            $query->where('pharmacy_id', $pharmacyId);
+        }
+
+        $alert = $query->first();
 
         if ($alert) {
             $alert->delete();
@@ -218,21 +238,32 @@ class NotificationController extends Controller
         return response()->json([
             'success' => true,
             'alerts' => $alerts->map(function ($a) {
-                // Real-time pharmacy-specific inventory lookup
-                $pivot = \Illuminate\Support\Facades\DB::table('pharmacy_medicine')
-                    ->where('pharmacy_id', $a->pharmacy_id)
-                    ->where('medicine_id', $a->medicine_id)
-                    ->first();
-
-                $qty = $pivot ? (int) $pivot->quantity_on_hand : null;
-                $isAvailable = $pivot ? ((bool) ($pivot->is_available ?? true) && ($qty !== null && $qty > 0)) : false;
-                $price = $pivot && isset($pivot->selling_price) ? (float) $pivot->selling_price : null;
+                // Real-time pharmacy-specific or global inventory lookup
+                if ($a->pharmacy_id !== null) {
+                    $pivot = \Illuminate\Support\Facades\DB::table('pharmacy_medicine')
+                        ->where('pharmacy_id', $a->pharmacy_id)
+                        ->where('medicine_id', $a->medicine_id)
+                        ->first();
+                    $qty = $pivot ? (int) $pivot->quantity_on_hand : null;
+                    $isAvailable = $pivot ? ((bool) ($pivot->is_available ?? true) && ($qty !== null && $qty > 0)) : false;
+                    $price = $pivot && isset($pivot->selling_price) ? (float) $pivot->selling_price : null;
+                    $pharmacyName = $a->pharmacy->name ?? 'Partner Pharmacy';
+                } else {
+                    $pivots = \Illuminate\Support\Facades\DB::table('pharmacy_medicine')
+                        ->where('medicine_id', $a->medicine_id)
+                        ->where('quantity_on_hand', '>', 0)
+                        ->get();
+                    $qty = $pivots->isNotEmpty() ? (int) $pivots->sum('quantity_on_hand') : 0;
+                    $isAvailable = $qty > 0;
+                    $price = $pivots->isNotEmpty() ? (float) $pivots->min('selling_price') : null;
+                    $pharmacyName = 'Any Partner Pharmacy';
+                }
 
                 return [
                     'id' => $a->id,
                     'pharmacy_id' => $a->pharmacy_id,
                     'medicine_id' => $a->medicine_id,
-                    'pharmacy_name' => $a->pharmacy->name ?? 'Partner Pharmacy',
+                    'pharmacy_name' => $pharmacyName,
                     'medicine_name' => $a->medicine->brand_name ?? $a->medicine->generic_name ?? 'Medicine',
                     'generic_name' => $a->medicine->generic_name ?? null,
                     'created_at' => $a->created_at ? $a->created_at->diffForHumans() : 'Recently',

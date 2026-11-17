@@ -103,7 +103,11 @@ class InventoryService
                 ->first();
 
             $wasAvailable = $currentPivot ? (bool) $currentPivot->is_available : false;
-            $wasZeroStock = $currentPivot ? ((int)$currentPivot->quantity_on_hand === 0) : true;
+            $oldQuantity = $currentPivot ? (int) $currentPivot->quantity_on_hand : 0;
+            $wasZeroStock = $oldQuantity === 0;
+            $reorderLevel = $currentPivot && $currentPivot->reorder_level !== null
+                ? (int) $currentPivot->reorder_level
+                : 10;
 
             $totalQuantity = (int) InventoryBatch::where('pharmacy_id', $pharmacyId)
                 ->where('medicine_id', $medicineId)
@@ -127,8 +131,11 @@ class InventoryService
                     'expiration_date' => $earliestActiveBatch?->expiration_date,
                 ]);
 
-                // RESTOCK ALERT: Single source of truth for restock notification
-                if ((!$wasAvailable || $wasZeroStock) && $totalQuantity > 0) {
+                // RESTOCK ALERT: Zero-to-positive restock OR low-stock replenishment
+                $restockedFromZero = (!$wasAvailable || $wasZeroStock) && $totalQuantity > 0;
+                $replenishedFromLowStock = $oldQuantity > 0 && $oldQuantity <= $reorderLevel && $totalQuantity > $oldQuantity;
+
+                if ($restockedFromZero || $replenishedFromLowStock) {
                     if (class_exists(\App\Models\StockAlert::class)) {
                         \App\Models\StockAlert::checkAndNotify($pharmacyId, $medicineId);
                     }

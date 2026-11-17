@@ -28,10 +28,14 @@ class OrderDeliveredNotification extends Notification
     public function toArray($notifiable): array
     {
         return [
-            'order_id' => $this->order->id,
-            'message'  => "Your medicine order #{$this->order->id} has been delivered successfully by driver {$this->driver->name}! Thank you for using GEORX.",
-            'icon'     => 'fas fa-check-circle text-emerald-500',
-            'url'      => "/orders/{$this->order->id}",
+            'type' => 'delivery_update',
+            'status' => 'delivered',
+            'title' => 'Order Delivered',
+            'order_id' => (int) $this->order->id,
+            'message' => "Your medicine order #{$this->order->id} has been delivered successfully by driver {$this->driver->name}! Thank you for using GEORX.",
+            'icon' => 'fas fa-check-circle text-emerald-500',
+            'action_url' => "/orders/{$this->order->id}",
+            'url' => route('orders.show', $this->order->id),
         ];
     }
 }

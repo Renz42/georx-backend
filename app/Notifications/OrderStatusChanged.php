@@ -28,11 +28,13 @@ class OrderStatusChanged extends Notification
     public function toArray($notifiable)
     {
         return [
+            'type' => 'order_update',
             'title' => 'Order Update #' . $this->order->id,
             'message' => $this->statusMessage,
-            'order_id' => $this->order->id,
+            'order_id' => (int) $this->order->id,
+            'action_url' => "/orders/{$this->order->id}",
             'url' => route('orders.show', $this->order->id),
-            'icon' => $this->icon
+            'icon' => $this->icon,
         ];
     }
 }

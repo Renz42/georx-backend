@@ -24,11 +24,16 @@ class ReviewPrompt extends Notification
 
     public function toArray($notifiable): array
     {
+        $this->order->loadMissing('pharmacy');
+        $pharmacyName = $this->order->pharmacy?->name ?? 'the pharmacy';
+
         return [
             'type' => 'review_prompt',
+            'status' => 'delivered',
             'title' => 'Order Delivered! Rate Your Experience',
-            'message' => "Your order #{$this->order->id} from {$this->order->pharmacy->name} has been delivered. Tap to submit your star rating and feedback.",
-            'order_id' => $this->order->id,
+            'message' => "Your order #{$this->order->id} from {$pharmacyName} has been delivered. Tap to submit your star rating and feedback.",
+            'order_id' => (int) $this->order->id,
+            'url' => route('orders.show', $this->order->id),
             'action_url' => "/orders/{$this->order->id}",
         ];
     }

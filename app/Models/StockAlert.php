@@ -60,8 +60,12 @@ class StockAlert extends Model
             return 0;
         }
 
-        // Asynchronously dispatch chunked background queue job
-        \App\Jobs\DispatchRestockAlertsJob::dispatch($pharmacyId, $medicineId);
+        // Execute synchronously on single-container deployments unless async worker mode is enabled
+        if (config('services.notifications.sync_restock_dispatch', true)) {
+            \App\Jobs\DispatchRestockAlertsJob::dispatchSync((int) $pharmacyId, (int) $medicineId);
+        } else {
+            \App\Jobs\DispatchRestockAlertsJob::dispatch((int) $pharmacyId, (int) $medicineId);
+        }
 
         return true;
     }
@@ -72,6 +76,12 @@ class StockAlert extends Model
         $pharmacy = Pharmacy::find($pharmacyId);
         $medicine = Medicine::find($medicineId);
         if (!$pharmacy || !$medicine) return false;
+
+        $dedupSeconds = max(5, (int) config('services.notifications.restock_dedup_seconds', 60));
+        $lockKey = "out_of_stock_lock:{$pharmacyId}:{$medicineId}";
+        if (!\Illuminate\Support\Facades\Cache::add($lockKey, true, $dedupSeconds)) {
+            return false;
+        }
 
         $alertUserIds = self::where('medicine_id', $medicineId)
             ->where(function ($q) use ($pharmacyId) {
@@ -85,11 +95,12 @@ class StockAlert extends Model
             ->pluck('user_id')
             ->toArray();
 
-        $allUserIds = array_unique(array_merge($alertUserIds, $favoriteUserIds));
+        $allUserIds = array_values(array_unique(array_merge($alertUserIds, $favoriteUserIds)));
         if (empty($allUserIds)) return false;
 
         $medName = $medicine->brand_name ?? $medicine->generic_name;
         $msg = "{$medName} is now out of stock at {$pharmacy->name}. You will be notified when it is restocked.";
+        $actionUrl = '/pharmacy/' . $pharmacy->id . '/medicine/' . $medicine->id;
         $now = now();
         $notifications = [];
 
@@ -104,12 +115,13 @@ class StockAlert extends Model
                     'status' => 'out_of_stock',
                     'title' => 'Medicine Out of Stock',
                     'message' => $msg,
-                    'pharmacy_id' => $pharmacy->id,
+                    'pharmacy_id' => (int) $pharmacy->id,
                     'pharmacy_name' => $pharmacy->name,
-                    'medicine_id' => $medicine->id,
+                    'medicine_id' => (int) $medicine->id,
                     'medicine_name' => $medName,
-                    'url' => '/pharmacy/' . $pharmacy->id . '/medicine/' . $medicine->id,
-                    'icon' => 'alert-circle-outline'
+                    'action_url' => $actionUrl,
+                    'url' => $actionUrl,
+                    'icon' => 'alert-circle-outline',
                 ]),
                 'read_at' => null,
                 'created_at' => $now,
@@ -121,33 +133,21 @@ class StockAlert extends Model
             \Illuminate\Support\Facades\DB::table('notifications')->insert($notifications);
         }
 
-        $deviceTokens = \App\Models\UserDeviceToken::whereIn('user_id', $allUserIds)
-            ->pluck('device_token')
-            ->toArray();
-
-        if (!empty($deviceTokens)) {
-            $pushPayloads = [];
-            foreach ($deviceTokens as $token) {
-                $pushPayloads[] = [
-                    'to' => $token,
-                    'sound' => 'default',
-                    'title' => 'Medicine Out of Stock',
-                    'body' => $msg,
-                    'data' => [
-                        'type' => 'stock_alert',
-                        'status' => 'out_of_stock',
-                        'pharmacy_id' => $pharmacy->id,
-                        'medicine_id' => $medicine->id,
-                    ],
-                ];
-            }
-
-            try {
-                \Illuminate\Support\Facades\Http::post('https://exp.host/--/api/v2/push/send', $pushPayloads);
-            } catch (\Exception $e) {
-                \Log::warning("Expo Push OutOfStock dispatch warning: " . $e->getMessage());
-            }
-        }
+        app(\App\Services\ExpoPushService::class)->sendToUserIds(
+            $allUserIds,
+            'Medicine Out of Stock',
+            $msg,
+            [
+                'type' => 'stock_alert',
+                'status' => 'out_of_stock',
+                'pharmacy_id' => (int) $pharmacy->id,
+                'medicine_id' => (int) $medicine->id,
+                'action_url' => $actionUrl,
+                'url' => $actionUrl,
+            ],
+            'stock_alerts',
+            'default'
+        );
 
         return true;
     }

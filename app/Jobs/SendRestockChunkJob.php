@@ -20,6 +20,7 @@ class SendRestockChunkJob implements ShouldQueue
     public int $pharmacyId;
     public int $medicineId;
     public array $alertIds;
+    public array $recipientUserIds;
 
     public int $tries = 3;
     public array $backoff = [10, 30, 90];
@@ -27,11 +28,12 @@ class SendRestockChunkJob implements ShouldQueue
     /**
      * Create a new job instance.
      */
-    public function __construct(int $pharmacyId, int $medicineId, array $alertIds)
+    public function __construct(int $pharmacyId, int $medicineId, array $alertIds = [], array $recipientUserIds = [])
     {
         $this->pharmacyId = $pharmacyId;
         $this->medicineId = $medicineId;
         $this->alertIds = $alertIds;
+        $this->recipientUserIds = $recipientUserIds;
     }
 
     /**
@@ -39,30 +41,32 @@ class SendRestockChunkJob implements ShouldQueue
      */
     public function handle(): void
     {
-        if (empty($this->alertIds)) return;
+        $userIds = array_values(array_unique(array_filter(array_map('intval', $this->recipientUserIds), fn (int $id) => $id > 0)));
 
-        // 1. Atomically mark alerts as inactive inside transaction
-        $alertsToProcess = [];
-        DB::transaction(function () use (&$alertsToProcess) {
-            // Lock alerts in chunk & deactivate
+        // Legacy compatibility path when invoked directly with StockAlert IDs:
+        // update notified_at while keeping is_active = true for recurring watch cycles.
+        if (empty($userIds) && !empty($this->alertIds)) {
             $alertsToProcess = StockAlert::whereIn('id', $this->alertIds)
                 ->where('is_active', true)
-                ->with(['pharmacy', 'medicine'])
-                ->get();
+                ->get(['id', 'user_id']);
 
             if ($alertsToProcess->isNotEmpty()) {
                 StockAlert::whereIn('id', $alertsToProcess->pluck('id'))->update([
-                    'is_active' => false,
                     'notified_at' => now(),
                 ]);
+                $userIds = $alertsToProcess->pluck('user_id')
+                    ->map(fn ($id) => (int) $id)
+                    ->unique()
+                    ->values()
+                    ->all();
             }
-        });
+        }
 
-        if (empty($alertsToProcess) || $alertsToProcess->isEmpty()) {
+        if (empty($userIds)) {
             return;
         }
 
-        // 2. Fetch live pivot info
+        // Fetch live pivot info
         $pivot = DB::table('pharmacy_medicine')
             ->where('pharmacy_id', $this->pharmacyId)
             ->where('medicine_id', $this->medicineId)
@@ -78,36 +82,39 @@ class SendRestockChunkJob implements ShouldQueue
 
         $medName = $medicine->brand_name ?? $medicine->generic_name;
         $details = [];
-        if ($price) $details[] = 'Price: ₱' . number_format($price, 2);
-        if ($stock) $details[] = 'Stock: ' . $stock;
+        if ($price) $details[] = 'Price: ₱' . number_format((float) $price, 2);
+        if ($stock !== null) $details[] = 'Stock: ' . $stock;
 
-        $msg = "{$medicine->generic_name} has been restocked at {$pharmacy->name}.";
+        $msg = "{$medName} is now back in stock at {$pharmacy->name}.";
         if (!empty($details)) {
             $msg .= ' (' . implode(', ', $details) . ')';
         }
 
+        $actionUrl = '/pharmacy/' . $pharmacy->id . '/medicine/' . $medicine->id;
         $now = now();
         $notifications = [];
 
-        // 3. Prepare bulk notification insert payload
-        foreach ($alertsToProcess as $alert) {
+        // Prepare bulk notification insert payload (one row per unique user)
+        foreach ($userIds as $userId) {
             $notifications[] = [
                 'id' => (string) Str::uuid(),
                 'type' => 'App\Notifications\MedicineRestocked',
                 'notifiable_type' => 'App\Models\User',
-                'notifiable_id' => $alert->user_id,
+                'notifiable_id' => $userId,
                 'data' => json_encode([
                     'type' => 'stock_alert',
+                    'status' => 'restocked',
                     'title' => 'Medicine Restocked',
                     'message' => $msg,
-                    'pharmacy_id' => $pharmacy->id,
+                    'pharmacy_id' => (int) $pharmacy->id,
                     'pharmacy_name' => $pharmacy->name,
-                    'medicine_id' => $medicine->id,
+                    'medicine_id' => (int) $medicine->id,
                     'medicine_name' => $medName,
-                    'selling_price' => $price,
-                    'quantity_on_hand' => $stock,
-                    'url' => '/pharmacy/' . $pharmacy->id . '/medicine/' . $medicine->id,
-                    'icon' => 'fas fa-box-open text-blue-500'
+                    'selling_price' => $price !== null ? (float) $price : null,
+                    'quantity_on_hand' => $stock !== null ? (int) $stock : null,
+                    'action_url' => $actionUrl,
+                    'url' => $actionUrl,
+                    'icon' => 'fas fa-box-open text-blue-500',
                 ]),
                 'read_at' => null,
                 'created_at' => $now,
@@ -115,38 +122,24 @@ class SendRestockChunkJob implements ShouldQueue
             ];
         }
 
-        // 4. Multi-row SQL bulk insert for high performance
         if (!empty($notifications)) {
             DB::table('notifications')->insert($notifications);
         }
 
-        // 5. Send Mobile Push Notifications to registered device tokens
-        $userIds = $alertsToProcess->pluck('user_id')->unique()->toArray();
-        $deviceTokens = \App\Models\UserDeviceToken::whereIn('user_id', $userIds)
-            ->pluck('device_token')
-            ->toArray();
-
-        if (!empty($deviceTokens)) {
-            $pushPayloads = [];
-            foreach ($deviceTokens as $token) {
-                $pushPayloads[] = [
-                    'to' => $token,
-                    'sound' => 'default',
-                    'title' => 'Medicine Restocked',
-                    'body' => $msg,
-                    'data' => [
-                        'type' => 'stock_alert',
-                        'pharmacy_id' => $pharmacy->id,
-                        'medicine_id' => $medicine->id,
-                    ],
-                ];
-            }
-
-            try {
-                \Illuminate\Support\Facades\Http::post('https://exp.host/--/api/v2/push/send', $pushPayloads);
-            } catch (\Exception $e) {
-                \Log::warning("Expo Push Notification dispatch warning: " . $e->getMessage());
-            }
-        }
+        app(\App\Services\ExpoPushService::class)->sendToUserIds(
+            $userIds,
+            'Medicine Restocked',
+            $msg,
+            [
+                'type' => 'stock_alert',
+                'status' => 'restocked',
+                'pharmacy_id' => (int) $pharmacy->id,
+                'medicine_id' => (int) $medicine->id,
+                'action_url' => $actionUrl,
+                'url' => $actionUrl,
+            ],
+            'stock_alerts',
+            'default'
+        );
     }
 }

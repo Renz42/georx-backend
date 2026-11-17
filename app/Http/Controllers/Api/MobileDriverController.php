@@ -159,16 +159,23 @@ class MobileDriverController extends Controller
                 return $targetDelivery;
             });
 
-            // Create Notification for Patient
-            $pharmacyName = $delivery->pickupPharmacy?->name ?? 'TGP Pharmacy';
-            $this->createPatientNotification(
-                $delivery->customer_id ?? $delivery->order?->user_id,
-                $delivery->order_id,
-                'Booking Accepted',
-                "Your medicine order #{$delivery->order_id} has been accepted by driver {$user->name}! The driver is heading to {$pharmacyName} for pickup.",
-                $user,
-                Delivery::STATUS_DRIVER_ASSIGNED
-            );
+            // Create Notifications for Patient & Pharmacy
+            $order = $delivery->order ?: Order::find($delivery->order_id);
+            if ($order) {
+                $notificationService = app(\App\Services\PatientNotificationService::class);
+                $notificationService->notifyOrderCustomer(
+                    $order,
+                    'driver_assigned:' . $user->id,
+                    new \App\Notifications\DriverAssignedNotification($order, $user, 'customer')
+                );
+                $notificationService->notifyOrderPharmacy(
+                    $order,
+                    'driver_assigned:' . $user->id,
+                    new \App\Notifications\DriverAssignedNotification($order, $user, 'pharmacy'),
+                    null,
+                    false
+                );
+            }
 
             // Supabase Realtime update broadcast
             SupabaseRealtimeService::broadcastDeliveryStatusChange($delivery, Delivery::STATUS_DRIVER_ASSIGNED, [
@@ -287,35 +294,46 @@ class MobileDriverController extends Controller
             $order->save();
         }
 
-        // Create Patient Notification
-        $statusMessages = [
-            Delivery::STATUS_DRIVER_AT_PHARMACY => [
-                'title' => 'Driver at Pharmacy',
-                'msg'   => "Driver {$user->name} has arrived at the pharmacy to pick up your prescription package.",
-            ],
-            Delivery::STATUS_PICKED_UP => [
-                'title' => 'Order Picked Up',
-                'msg'   => "Driver {$user->name} has picked up your medicine package from the pharmacy cashier.",
-            ],
-            Delivery::STATUS_OUT_FOR_DELIVERY => [
-                'title' => 'Out for Delivery',
-                'msg'   => "Driver {$user->name} is now on the way to deliver your order to Barangay Alijis.",
-            ],
-            Delivery::STATUS_DELIVERED => [
-                'title' => 'Order Delivered',
-                'msg'   => "Your prescription medicine order has been successfully delivered by {$user->name}.",
-            ],
-        ];
-
-        if (isset($statusMessages[$nextStatus])) {
-            $this->createPatientNotification(
-                $delivery->customer_id ?? $order?->user_id,
-                $delivery->order_id,
-                $statusMessages[$nextStatus]['title'],
-                $statusMessages[$nextStatus]['msg'],
-                $user,
-                $nextStatus
-            );
+        // Dispatch standardized notifications (DB + Expo push + idempotency)
+        if ($order) {
+            $notificationService = app(\App\Services\PatientNotificationService::class);
+            if ($nextStatus === Delivery::STATUS_DRIVER_AT_PHARMACY) {
+                $notificationService->notifyOrderCustomer(
+                    $order,
+                    'arrived_at_pickup',
+                    new \App\Notifications\DriverArrivedAtPharmacyNotification($order, $user, 'customer')
+                );
+                $notificationService->notifyOrderPharmacy(
+                    $order,
+                    'arrived_at_pickup',
+                    new \App\Notifications\DriverArrivedAtPharmacyNotification($order, $user, 'pharmacy'),
+                    null,
+                    false
+                );
+            } elseif ($nextStatus === Delivery::STATUS_PICKED_UP) {
+                $notificationService->notifyOrderCustomer(
+                    $order,
+                    'picked_up',
+                    new \App\Notifications\OrderPickedUpNotification($order, $user)
+                );
+            } elseif ($nextStatus === Delivery::STATUS_OUT_FOR_DELIVERY) {
+                $notificationService->notifyOrderCustomer(
+                    $order,
+                    'in_transit',
+                    new \App\Notifications\OrderOutForDeliveryNotification($order, $user)
+                );
+            } elseif ($nextStatus === Delivery::STATUS_DELIVERED) {
+                $notificationService->notifyOrderCustomer(
+                    $order,
+                    'delivered',
+                    new \App\Notifications\OrderDeliveredNotification($order, $user)
+                );
+                $notificationService->notifyOrderCustomer(
+                    $order,
+                    'review_prompt',
+                    new \App\Notifications\ReviewPrompt($order)
+                );
+            }
         }
 
         // Supabase Realtime broadcast

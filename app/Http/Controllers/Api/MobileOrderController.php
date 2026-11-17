@@ -326,7 +326,7 @@ class MobileOrderController extends Controller
     {
         $user = $request->user();
 
-        return \Illuminate\Support\Facades\DB::transaction(function () use ($user, $id) {
+        $txResult = \Illuminate\Support\Facades\DB::transaction(function () use ($user, $id) {
             $order = Order::where('id', $id)
                 ->where('user_id', $user->id)
                 ->with('delivery')
@@ -463,32 +463,46 @@ class MobileOrderController extends Controller
                 }
             }
 
-        // Trigger Notifications (Customer Review Prompt & Pharmacy Admin Alert)
-        try {
-            $user->notify(new \App\Notifications\ReviewPrompt($order));
+        return [
+            'order' => $order,
+            'response' => response()->json([
+                'status' => 'success',
+                'message' => 'Delivery approved! Thank you for confirming receipt of your prescription order.',
+                'order' => [
+                    'id' => $order->id,
+                    'status' => $order->status,
+                    'status_label' => 'Delivered (Approved)',
+                    'delivery_status' => 'delivered',
+                    'customer_confirmed_delivery' => true,
+                    'customer_confirmed_at' => $order->customer_confirmed_at ? $order->customer_confirmed_at->format('M d, Y g:i A') : $now->format('M d, Y g:i A'),
+                ],
+            ]),
+        ];
+        });
 
-            $pharmacyUser = \App\Models\User::where('pharmacy_id', $order->pharmacy_id)->first();
-            if ($pharmacyUser) {
-                $pharmacyUser->notify(new \App\Notifications\OrderStatusChanged(
+        if (is_array($txResult) && isset($txResult['response'])) {
+            $order = $txResult['order'];
+            $notificationService = app(\App\Services\PatientNotificationService::class);
+            $notificationService->notifyOrderCustomer(
+                $order,
+                'review_prompt',
+                new \App\Notifications\ReviewPrompt($order)
+            );
+            $notificationService->notifyOrderPharmacy(
+                $order,
+                'customer_confirmed_delivery',
+                new \App\Notifications\OrderStatusChanged(
                     $order,
                     "Order #{$order->id} has been delivered & approved by customer {$user->name}!",
-                    "fas fa-check-circle text-emerald-500"
-                ));
-            }
-        } catch (\Throwable $e) {}
+                    'fas fa-check-circle text-emerald-500'
+                ),
+                null,
+                false
+            );
 
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Delivery approved! Thank you for confirming receipt of your prescription order.',
-            'order' => [
-                'id' => $order->id,
-                'status' => $order->status,
-                'status_label' => 'Delivered (Approved)',
-                'delivery_status' => 'delivered',
-                'customer_confirmed_delivery' => true,
-                'customer_confirmed_at' => $order->customer_confirmed_at ? $order->customer_confirmed_at->format('M d, Y g:i A') : $now->format('M d, Y g:i A'),
-            ],
-        ]);
-        });
+            return $txResult['response'];
+        }
+
+        return $txResult;
     }
 }

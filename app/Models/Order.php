@@ -15,7 +15,9 @@ class Order extends Model
     public const STATUS_PENDING = 'pending'; // Ready for external dispatch
     public const STATUS_ACCEPTED = 'accepted'; // Dispatched to external courier
     public const STATUS_AT_PHARMACY = 'at_pharmacy';
+    public const STATUS_DRIVER_AT_PHARMACY = 'at_pharmacy';
     public const STATUS_PICKED_UP = 'picked_up';
+    public const STATUS_OUT_FOR_DELIVERY = 'out_for_delivery';
     public const STATUS_DELIVERED = 'delivered';
     public const STATUS_CANCELLED = 'cancelled';
     public const STATUS_REJECTED = 'rejected';

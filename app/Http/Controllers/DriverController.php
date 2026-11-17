@@ -270,18 +270,24 @@ class DriverController extends Controller
                 // 5. Set driver availability to false (on active delivery)
                 $user->driverProfile?->update(['is_available' => false]);
 
-                // 6. Notify Customer & Pharmacy Admin
-                if ($order && $order->user) {
-                    $order->user->notify(new DriverAssignedNotification($order, $user, 'customer'));
-                }
-
-                if ($order) {
-                    $pharmacyOwner = User::where('pharmacy_id', $order->pharmacy_id)->first();
-                    if ($pharmacyOwner) {
-                        $pharmacyOwner->notify(new DriverAssignedNotification($order, $user, 'pharmacy'));
-                    }
-                }
+                return $order;
             });
+
+            if ($order) {
+                $notificationService = app(\App\Services\PatientNotificationService::class);
+                $notificationService->notifyOrderCustomer(
+                    $order,
+                    'driver_assigned:' . $user->id,
+                    new DriverAssignedNotification($order, $user, 'customer')
+                );
+                $notificationService->notifyOrderPharmacy(
+                    $order,
+                    'driver_assigned:' . $user->id,
+                    new DriverAssignedNotification($order, $user, 'pharmacy'),
+                    null,
+                    false
+                );
+            }
 
             return redirect()->route('driver.bookings.show', $id)
                 ->with('success', 'Booking accepted! Proceed to the pharmacy to pick up the order.');
@@ -311,7 +317,7 @@ class DriverController extends Controller
         $targetStatus = $request->status;
 
         try {
-            $message = DB::transaction(function () use ($id, $user, $targetStatus) {
+            $txResult = DB::transaction(function () use ($id, $user, $targetStatus) {
                 // SECURITY CHECK: Only assigned driver can update
                 $delivery = Delivery::where(function ($q) use ($id) {
                         $q->where('id', $id)->orWhere('order_id', $id);
@@ -336,6 +342,7 @@ class DriverController extends Controller
 
                 $now = now();
                 $msg = 'Status updated.';
+                $events = [];
 
                 if ($targetStatus === 'driver_at_pharmacy') {
                     $delivery->update([
@@ -344,14 +351,8 @@ class DriverController extends Controller
                     ]);
                     $order->update(['status' => Order::STATUS_AT_PHARMACY]);
 
-                    // Notifications
-                    if ($order->user) {
-                        $order->user->notify(new \App\Notifications\DriverArrivedAtPharmacyNotification($order, $user, 'customer'));
-                    }
-                    $pharmacyOwner = User::where('pharmacy_id', $order->pharmacy_id)->first();
-                    if ($pharmacyOwner) {
-                        $pharmacyOwner->notify(new \App\Notifications\DriverArrivedAtPharmacyNotification($order, $user, 'pharmacy'));
-                    }
+                    $events[] = ['target' => 'customer', 'suffix' => 'arrived_at_pickup', 'notification' => new \App\Notifications\DriverArrivedAtPharmacyNotification($order, $user, 'customer')];
+                    $events[] = ['target' => 'pharmacy', 'suffix' => 'arrived_at_pickup', 'notification' => new \App\Notifications\DriverArrivedAtPharmacyNotification($order, $user, 'pharmacy')];
 
                     $msg = 'Arrived at pharmacy! Please collect and verify the medicine.';
 
@@ -365,9 +366,7 @@ class DriverController extends Controller
                         'picked_up_at' => $now,
                     ]);
 
-                    if ($order->user) {
-                        $order->user->notify(new \App\Notifications\OrderPickedUpNotification($order, $user));
-                    }
+                    $events[] = ['target' => 'customer', 'suffix' => 'picked_up', 'notification' => new \App\Notifications\OrderPickedUpNotification($order, $user)];
 
                     $msg = 'Medicine verified & picked up from pharmacy!';
 
@@ -377,9 +376,7 @@ class DriverController extends Controller
                         'out_for_delivery_at' => $now,
                     ]);
 
-                    if ($order->user) {
-                        $order->user->notify(new \App\Notifications\OrderOutForDeliveryNotification($order, $user));
-                    }
+                    $events[] = ['target' => 'customer', 'suffix' => 'in_transit', 'notification' => new \App\Notifications\OrderOutForDeliveryNotification($order, $user)];
 
                     $msg = 'You are now out for delivery heading to the customer location!';
 
@@ -396,18 +393,25 @@ class DriverController extends Controller
                     // Restore driver availability for next booking
                     $user->driverProfile?->update(['is_available' => true]);
 
-                    if ($order->user) {
-                        $order->user->notify(new \App\Notifications\OrderDeliveredNotification($order, $user));
-                        $order->user->notify(new ReviewPrompt($order));
-                    }
+                    $events[] = ['target' => 'customer', 'suffix' => 'delivered', 'notification' => new \App\Notifications\OrderDeliveredNotification($order, $user)];
+                    $events[] = ['target' => 'customer', 'suffix' => 'review_prompt', 'notification' => new ReviewPrompt($order)];
 
                     $msg = 'Delivery completed successfully! You are now available for new bookings.';
                 }
 
-                return $msg;
+                return ['message' => $msg, 'order' => $order, 'events' => $events];
             });
 
-            return redirect()->route('driver.dashboard')->with('success', $message);
+            $notificationService = app(\App\Services\PatientNotificationService::class);
+            foreach ($txResult['events'] as $evt) {
+                if ($evt['target'] === 'pharmacy') {
+                    $notificationService->notifyOrderPharmacy($txResult['order'], $evt['suffix'], $evt['notification'], null, false);
+                } else {
+                    $notificationService->notifyOrderCustomer($txResult['order'], $evt['suffix'], $evt['notification']);
+                }
+            }
+
+            return redirect()->route('driver.dashboard')->with('success', $txResult['message']);
 
         } catch (Exception $e) {
             return back()->with('error', $e->getMessage());

@@ -20,6 +20,11 @@ class DeviceTokenController extends Controller
 
         $user = Auth::user();
 
+        // If another logged-out account previously held this physical device token, unbind it first.
+        UserDeviceToken::where('device_token', $validated['device_token'])
+            ->where('user_id', '!=', $user->id)
+            ->delete();
+
         $token = UserDeviceToken::updateOrCreate(
             [
                 'user_id' => $user->id,

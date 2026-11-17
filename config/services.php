@@ -53,4 +53,18 @@ return [
         'publishable_key' => trim((string) env('SUPABASE_PUBLISHABLE_KEY', '')) ?: null,
     ],
 
+    'notifications' => [
+        'sync_restock_dispatch' => filter_var(
+            env('NOTIFICATIONS_SYNC_RESTOCK_DISPATCH', true),
+            FILTER_VALIDATE_BOOLEAN
+        ),
+        'expo_push_enabled' => filter_var(
+            env('EXPO_PUSH_ENABLED', true),
+            FILTER_VALIDATE_BOOLEAN
+        ),
+        'expo_push_url' => env('EXPO_PUSH_URL', 'https://exp.host/--/api/v2/push/send'),
+        'expo_push_timeout' => (int) env('EXPO_PUSH_TIMEOUT', 5),
+        'restock_dedup_seconds' => (int) env('RESTOCK_NOTIFY_DEDUP_SECONDS', 60),
+    ],
+
 ];

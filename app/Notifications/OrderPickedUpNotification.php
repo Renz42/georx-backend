@@ -27,13 +27,18 @@ class OrderPickedUpNotification extends Notification
 
     public function toArray($notifiable): array
     {
-        $pharmacyName = $this->order->pharmacy->name ?? 'the pharmacy';
+        $this->order->loadMissing('pharmacy');
+        $pharmacyName = $this->order->pharmacy?->name ?? 'the pharmacy';
 
         return [
-            'order_id' => $this->order->id,
-            'message'  => "Your medicine has been picked up from {$pharmacyName} and verified by driver {$this->driver->name}.",
-            'icon'     => 'fas fa-box text-teal-500',
-            'url'      => "/orders/{$this->order->id}",
+            'type' => 'delivery_update',
+            'status' => 'picked_up',
+            'title' => 'Order Picked Up',
+            'order_id' => (int) $this->order->id,
+            'message' => "Your medicine has been picked up from {$pharmacyName} and verified by driver {$this->driver->name}.",
+            'icon' => 'fas fa-box text-teal-500',
+            'action_url' => "/orders/{$this->order->id}",
+            'url' => route('orders.show', $this->order->id),
         ];
     }
 }
